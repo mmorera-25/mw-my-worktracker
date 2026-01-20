@@ -419,7 +419,7 @@ export function StoryDetail({
                       e.preventDefault();
                       setIsEditingDescription(true);
                     }
-                  })}
+                  }}
                   className="rich-text-content text-sm leading-relaxed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/50"
                   dangerouslySetInnerHTML={renderRichText(story.description)}
                 />
