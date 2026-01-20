@@ -4,6 +4,12 @@ set -euo pipefail
 # Always run from the repo root
 cd "$(git rev-parse --show-toplevel)"
 
+# Skip in CI environments (GitHub Actions, etc.)
+if [ "${CI:-}" = "true" ]; then
+  echo "Auto-backup: skipping in CI."
+  exit 0
+fi
+
 # Skip if there is nothing new to commit
 if git diff --quiet && git diff --cached --quiet; then
   echo "Auto-backup: no changes to commit."
