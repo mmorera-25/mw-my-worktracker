@@ -370,6 +370,21 @@ export function StoryDetail({
                 onChange={(value) => setDescription(value)}
                 placeholder="Add notes..."
               />
+              <div className="rounded-md border border-panel-border/80 bg-background/50 p-3">
+                <p className="mb-2 text-[11px] uppercase text-muted-foreground">
+                  Formatted preview
+                </p>
+                {description ? (
+                  <div
+                    className="text-sm leading-relaxed text-foreground space-y-2"
+                    dangerouslySetInnerHTML={renderRichText(description)}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Nothing to preview yet.
+                  </p>
+                )}
+              </div>
               <div className="flex gap-2">
                 <Button size="sm" onClick={saveDescription}>
                   Save
