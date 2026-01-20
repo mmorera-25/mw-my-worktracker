@@ -212,3 +212,21 @@
   padding: 0;
   min-height: auto;
 }
+
+.rich-text-content ol,
+.rich-text-content ul {
+  margin: 0.5rem 0 0.5rem 1.25rem;
+  padding-left: 1.25rem;
+}
+
+.rich-text-content ol {
+  list-style-type: decimal;
+}
+
+.rich-text-content ul {
+  list-style-type: disc;
+}
+
+.rich-text-content li {
+  margin-bottom: 0.25rem;
+}

@@ -370,21 +370,6 @@ export function StoryDetail({
                 onChange={(value) => setDescription(value)}
                 placeholder="Add notes..."
               />
-              <div className="rounded-md border border-panel-border/80 bg-background/50 p-3">
-                <p className="mb-2 text-[11px] uppercase text-muted-foreground">
-                  Formatted preview
-                </p>
-                {description ? (
-                  <div
-                    className="text-sm leading-relaxed text-foreground space-y-2"
-                    dangerouslySetInnerHTML={renderRichText(description)}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Nothing to preview yet.
-                  </p>
-                )}
-              </div>
               <div className="flex gap-2">
                 <Button size="sm" onClick={saveDescription}>
                   Save
@@ -402,19 +387,27 @@ export function StoryDetail({
               </div>
             </div>
           ) : (
-            <button
+            <div
+              role="button"
+              tabIndex={0}
               onClick={() => setIsEditingDescription(true)}
-              className="w-full text-left text-sm text-muted-foreground hover:text-foreground transition-colors"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setIsEditingDescription(true);
+                }
+              }}
+              className="w-full text-left text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/50"
             >
               {story.description ? (
                 <span
-                  className="block text-left"
+                  className="block text-left leading-relaxed rich-text-content"
                   dangerouslySetInnerHTML={renderRichText(story.description)}
                 />
               ) : (
                 "Add notes..."
               )}
-            </button>
+            </div>
           )}
         </div>
 
