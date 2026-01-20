@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Calendar,
   MoreHorizontal,
@@ -69,6 +69,22 @@ export function StoryDetail({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+
+  const parsedLinks = useMemo(() => {
+    if (!story.description) return [];
+    try {
+      const doc = new DOMParser().parseFromString(story.description, "text/html");
+      const anchors = Array.from(doc.querySelectorAll("a"));
+      return anchors
+        .map((a) => ({
+          href: a.getAttribute("href") || "",
+          text: a.textContent?.trim() || a.getAttribute("href") || "",
+        }))
+        .filter((link) => !!link.href);
+    } catch {
+      return [];
+    }
+  }, [story.description]);
 
   useEffect(() => {
     setTitle(story.title);
@@ -363,19 +379,7 @@ export function StoryDetail({
 
         {/* Description */}
         <div className="mb-6">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-[11px] uppercase text-muted-foreground">Description</p>
-            {!isEditingDescription && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 px-2 text-xs"
-                onClick={() => setIsEditingDescription(true)}
-              >
-                Edit
-              </Button>
-            )}
-          </div>
+          <p className="mb-2 text-[11px] uppercase text-muted-foreground">Description</p>
           {isEditingDescription ? (
             <div className="space-y-2">
               <RichTextEditor
@@ -403,18 +407,50 @@ export function StoryDetail({
             <div className="rounded-md border border-panel-border/80 bg-background/60 p-3">
               {story.description ? (
                 <div
-                  className="rich-text-content text-sm leading-relaxed"
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.closest("a")) return;
+                    setIsEditingDescription(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setIsEditingDescription(true);
+                    }
+                  })}
+                  className="rich-text-content text-sm leading-relaxed focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/50"
                   dangerouslySetInnerHTML={renderRichText(story.description)}
                 />
               ) : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="px-0 text-sm text-muted-foreground hover:text-foreground"
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground hover:text-foreground"
                   onClick={() => setIsEditingDescription(true)}
                 >
                   Add notes...
-                </Button>
+                </button>
+              )}
+              {parsedLinks.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-[11px] uppercase text-muted-foreground">Links</p>
+                  <ul className="list-disc space-y-1 pl-4 text-sm">
+                    {parsedLinks.map((link, index) => (
+                      <li key={`${link.href}-${index}`}>
+                        <a
+                          href={link.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary underline underline-offset-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {link.text}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           )}
