@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WorkTracker Offline</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --color-background: #0e0e10;
+        --color-surface: #18181b;
+        --color-border: #2a2a2e;
+        --color-text-primary: #e5e5e7;
+        --color-text-secondary: #9ca3af;
+        --color-accent: #6366f1;
+        --radius-2xl: 20px;
+        --shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.35);
+        --font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--color-background);
+        color: var(--color-text-primary);
+        font-family: var(--font-family);
+      }
+      .card {
+        padding: 32px 36px;
+        width: min(520px, 90vw);
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-2xl);
+        box-shadow: var(--shadow-soft);
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+        letter-spacing: -0.01em;
+      }
+      p {
+        margin: 6px 0 0;
+        color: var(--color-text-secondary);
+        font-size: 16px;
+        line-height: 1.5;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(99, 102, 241, 0.12);
+        color: var(--color-accent);
+        font-weight: 600;
+        margin-bottom: 14px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--color-accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="pill"><span class="dot"></span>Offline mode</div>
+      <h1>WorkTracker</h1>
+      <p>You&apos;re offline. We&apos;ll keep your workspace ready and sync when you reconnect.</p>
+    </div>
+  </body>
+</html>

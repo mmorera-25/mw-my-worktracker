@@ -1,0 +1,214 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import 'quill/dist/quill.snow.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 20% 98%;
+    --foreground: 220 20% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 10%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 20% 25%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 46%;
+
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.375rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 10% 40%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 91% 97%;
+    --sidebar-accent-foreground: 217 91% 45%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217 91% 60%;
+
+    --epic-purple: 270 70% 60%;
+    --epic-blue: 217 91% 60%;
+    --epic-green: 142 70% 45%;
+    --epic-orange: 25 95% 53%;
+    --epic-pink: 330 80% 60%;
+
+    --status-todo: 220 10% 60%;
+    --status-progress: 217 91% 60%;
+    --status-done: 142 70% 45%;
+
+    --priority-low: 142 70% 45%;
+    --priority-medium: 45 93% 47%;
+    --priority-high: 0 84% 60%;
+
+    --panel-border: 220 13% 91%;
+    --hover-overlay: 220 14% 96%;
+    --selected-bg: 217 91% 97%;
+    --selected-border: 217 91% 60%;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 32% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 32% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 32% 17%;
+    --input: 217 32% 17%;
+    --ring: 217 91% 60%;
+
+    --sidebar-background: 222 47% 8%;
+    --sidebar-foreground: 210 40% 80%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217 32% 17%;
+    --sidebar-accent-foreground: 217 91% 70%;
+    --sidebar-border: 217 32% 17%;
+    --sidebar-ring: 217 91% 60%;
+
+    --panel-border: 217 32% 17%;
+    --hover-overlay: 217 32% 12%;
+    --selected-bg: 217 32% 15%;
+    --selected-border: 217 91% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 3px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+.rich-editor .ql-toolbar {
+  border-color: hsl(var(--border));
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
+  border-top-left-radius: 12px;
+  border-top-right-radius: 12px;
+}
+
+.rich-editor .ql-container {
+  border-color: hsl(var(--border));
+  border-bottom-left-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+
+.rich-editor .ql-editor {
+  min-height: 160px;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+  line-height: 1.6;
+  font-size: 15px;
+}
+
+.rich-editor .ql-editor.ql-blank::before {
+  color: hsl(var(--muted-foreground));
+}
+
+.rich-editor .ql-toolbar button:hover,
+.rich-editor .ql-toolbar button.ql-active {
+  color: hsl(var(--primary));
+}
+
+.rich-editor .ql-snow .ql-picker {
+  color: hsl(var(--muted-foreground));
+}
+
+.rich-editor .ql-snow .ql-picker-options {
+  background: hsl(var(--popover));
+  border-color: hsl(var(--border));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+}
+
+.rich-editor .ql-snow .ql-stroke {
+  stroke: hsl(var(--muted-foreground));
+}
+
+.rich-editor .ql-snow .ql-fill {
+  fill: hsl(var(--muted-foreground));
+}
+
+.ql-editor li[data-list='checked'] > .ql-ui:before,
+.ql-editor li[data-list='unchecked'] > .ql-ui:before {
+  font-size: 1.35em;
+  position: relative;
+  top: -0.05em;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.ql-editor li[data-list='checked'],
+.ql-editor li[data-list='unchecked'] {
+  line-height: 1.5;
+}
+
+.note-preview.ql-editor {
+  padding: 0;
+  min-height: auto;
+}
