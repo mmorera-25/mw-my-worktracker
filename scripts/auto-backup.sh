@@ -10,7 +10,7 @@ if git diff --quiet && git diff --cached --quiet; then
   exit 0
 fi
 
-commit_msg="chore: auto-backup postbuild $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+commit_msg="backup $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
 
 echo "Auto-backup: committing changes..."
 git add -A
