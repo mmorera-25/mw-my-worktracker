@@ -363,6 +363,19 @@ export function StoryDetail({
 
         {/* Description */}
         <div className="mb-6">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[11px] uppercase text-muted-foreground">Description</p>
+            {!isEditingDescription && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 text-xs"
+                onClick={() => setIsEditingDescription(true)}
+              >
+                Edit
+              </Button>
+            )}
+          </div>
           {isEditingDescription ? (
             <div className="space-y-2">
               <RichTextEditor
@@ -387,25 +400,21 @@ export function StoryDetail({
               </div>
             </div>
           ) : (
-            <div
-              role="button"
-              tabIndex={0}
-              onClick={() => setIsEditingDescription(true)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setIsEditingDescription(true);
-                }
-              }}
-              className="w-full text-left text-sm text-muted-foreground hover:text-foreground transition-colors rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary/50"
-            >
+            <div className="rounded-md border border-panel-border/80 bg-background/60 p-3">
               {story.description ? (
-                <span
-                  className="block text-left leading-relaxed rich-text-content"
+                <div
+                  className="rich-text-content text-sm leading-relaxed"
                   dangerouslySetInnerHTML={renderRichText(story.description)}
                 />
               ) : (
-                "Add notes..."
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="px-0 text-sm text-muted-foreground hover:text-foreground"
+                  onClick={() => setIsEditingDescription(true)}
+                >
+                  Add notes...
+                </Button>
               )}
             </div>
           )}

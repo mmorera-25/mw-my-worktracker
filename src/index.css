@@ -230,3 +230,15 @@
 .rich-text-content li {
   margin-bottom: 0.25rem;
 }
+
+.rich-text-content a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 2px;
+  word-break: break-word;
+}
+
+.rich-text-content a:hover {
+  color: hsl(var(--primary) / 0.8);
+}
