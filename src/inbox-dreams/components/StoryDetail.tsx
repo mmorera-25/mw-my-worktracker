@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import {
   Calendar,
   MoreHorizontal,
@@ -69,22 +69,6 @@ export function StoryDetail({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
-
-  const parsedLinks = useMemo(() => {
-    if (!story.description) return [];
-    try {
-      const doc = new DOMParser().parseFromString(story.description, "text/html");
-      const anchors = Array.from(doc.querySelectorAll("a"));
-      return anchors
-        .map((a) => ({
-          href: a.getAttribute("href") || "",
-          text: a.textContent?.trim() || a.getAttribute("href") || "",
-        }))
-        .filter((link) => !!link.href);
-    } catch {
-      return [];
-    }
-  }, [story.description]);
 
   useEffect(() => {
     setTitle(story.title);
@@ -431,26 +415,6 @@ export function StoryDetail({
                 >
                   Add notes...
                 </button>
-              )}
-              {parsedLinks.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  <p className="text-[11px] uppercase text-muted-foreground">Links</p>
-                  <ul className="list-disc space-y-1 pl-4 text-sm">
-                    {parsedLinks.map((link, index) => (
-                      <li key={`${link.href}-${index}`}>
-                        <a
-                          href={link.href}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary underline underline-offset-2"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {link.text}
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
               )}
             </div>
           )}
