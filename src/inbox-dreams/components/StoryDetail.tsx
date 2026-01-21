@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Calendar, Pencil, Check, X, Paperclip, List, Plus } from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { Button } from "@inbox/components/ui/button";
@@ -16,6 +16,7 @@ import {
 } from "@inbox/components/ui/select";
 import { cn } from "@inbox/lib/utils";
 import { format, differenceInCalendarDays, isSameDay } from "date-fns";
+import { loadDirectoryHandle } from "../../lib/storage/handleStore";
 
 interface StoryDetailProps {
   story: Story;
@@ -80,6 +81,7 @@ export function StoryDetail({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     setTitle(story.title);
@@ -166,6 +168,74 @@ export function StoryDetail({
     setEditingCommentId(null);
     setEditingCommentText("");
     setIsCommentModalOpen(false);
+  };
+
+  const ensureStorageDir = async (): Promise<FileSystemDirectoryHandle | null> => {
+    const dir = await loadDirectoryHandle();
+    if (!dir) {
+      alert("Storage folder is not available. Please enable filesystem storage in settings.");
+      return null;
+    }
+    let permission = await dir.queryPermission({ mode: "readwrite" });
+    if (permission !== "granted") {
+      permission = await dir.requestPermission({ mode: "readwrite" });
+    }
+    if (permission !== "granted") {
+      alert("Permission to write to the storage folder was denied.");
+      return null;
+    }
+    try {
+      const storageDir = await dir.getDirectoryHandle("storage", { create: true });
+      return storageDir;
+    } catch (error) {
+      console.error("Failed to access storage directory", error);
+      alert("Unable to access the storage folder.");
+      return null;
+    }
+  };
+
+  const handleAttachFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const storageDir = await ensureStorageDir();
+      if (!storageDir) return;
+      const targetHandle = await storageDir.getFileHandle(file.name, { create: true });
+      const writable = await targetHandle.createWritable();
+      await file.stream().pipeTo(writable);
+      const nextAttachments = [
+        ...(story.attachments ?? []),
+        {
+          id: crypto.randomUUID(),
+          name: file.name,
+          path: `storage/${file.name}`,
+        },
+      ];
+      onUpdateStory({ ...story, attachments: nextAttachments });
+    } catch (error) {
+      console.error("Failed to attach file", error);
+      alert("Failed to attach file. Please try again.");
+    } finally {
+      setIsUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleOpenAttachment = async (path: string) => {
+    const storageDir = await ensureStorageDir();
+    if (!storageDir) return;
+    try {
+      const filename = path.split("/").pop() ?? path;
+      const fileHandle = await storageDir.getFileHandle(filename, { create: false });
+      const file = await fileHandle.getFile();
+      const url = URL.createObjectURL(file);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (error) {
+      console.error("Failed to open attachment", error);
+      alert("Could not open this attachment. It may have been moved or deleted.");
+    }
   };
 
   return (
@@ -426,6 +496,33 @@ export function StoryDetail({
           )}
         </div>
 
+        {/* Attachments */}
+        <div className="mb-6 space-y-2">
+          <p className="text-[11px] uppercase text-muted-foreground">Attachments</p>
+          {(story.attachments ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">No attachments yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {story.attachments!.map((file) => (
+                <li
+                  key={file.id}
+                  className="flex items-center justify-between rounded-md border border-panel-border/70 bg-background/60 px-3 py-2 text-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    <Paperclip className="w-4 h-4 text-muted-foreground" />
+                    <button
+                      className="text-primary underline underline-offset-2"
+                      onClick={() => handleOpenAttachment(file.path)}
+                    >
+                      {file.name}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         <Dialog
           open={isCommentModalOpen}
           onClose={closeCommentModal}
@@ -514,9 +611,25 @@ export function StoryDetail({
             <span className="text-sm text-muted-foreground">{epic.name}</span>
           </div>
         )}
-        <div className="flex items-center gap-1 ml-auto">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+        <div className="flex items-center gap-2 ml-auto">
+          <input
+            type="file"
+            className="hidden"
+            id="story-attachment-input"
+            onChange={handleAttachFile}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex items-center gap-2"
+            onClick={() => {
+              const input = document.getElementById("story-attachment-input") as HTMLInputElement | null;
+              input?.click();
+            }}
+            disabled={isUploading}
+          >
             <Paperclip className="w-4 h-4" />
+            {isUploading ? "Uploading..." : "Add attachment"}
           </Button>
         </div>
       </div>

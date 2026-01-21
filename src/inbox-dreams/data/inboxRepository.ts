@@ -69,6 +69,11 @@ const serializeStory = (story: Story) => ({
     meetingDate: comment.meetingDate,
     isCompleted: comment.isCompleted,
   })),
+  attachments: story.attachments?.map((file) => ({
+    id: file.id,
+    name: file.name,
+    path: file.path,
+  })),
 });
 
 const deserializeStory = (raw: Partial<Story>): Story => ({
@@ -95,6 +100,13 @@ const deserializeStory = (raw: Partial<Story>): Story => ({
         createdAt: toDate(comment.createdAt),
         meetingDate: typeof comment.meetingDate === "number" ? comment.meetingDate : undefined,
         isCompleted: Boolean(comment.isCompleted),
+      }))
+    : [],
+  attachments: Array.isArray((raw as Story).attachments)
+    ? (raw as Story).attachments!.map((file) => ({
+        id: file.id || crypto.randomUUID(),
+        name: file.name || "file",
+        path: file.path || "",
       }))
     : [],
 });

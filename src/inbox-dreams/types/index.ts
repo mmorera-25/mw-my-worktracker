@@ -23,6 +23,7 @@ export interface Story {
   deletedAt?: Date;
   completedAt?: Date;
   comments?: StoryComment[];
+  attachments?: StoryAttachment[];
 }
 
 export interface Epic {
@@ -42,4 +43,10 @@ export interface StoryComment {
   createdAt: Date;
   meetingDate?: number;
   isCompleted?: boolean;
+}
+
+export interface StoryAttachment {
+  id: string;
+  name: string;
+  path: string;
 }
