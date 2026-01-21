@@ -1036,7 +1036,12 @@ const OneOnOneFeed = ({
             <div className="space-y-2">
               <p className="text-sm font-semibold text-text-primary">Stories</p>
               {activeEpicStories.length === 0 ? (
-                <p className="text-xs text-text-secondary">No stories yet.</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-text-secondary">No stories yet.</p>
+                  <Button size="sm" onClick={handleAddStoryForEpic}>
+                    Add story
+                  </Button>
+                </div>
               ) : (
                 <>
                   <div className="flex items-center justify-between">
