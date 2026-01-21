@@ -66,6 +66,8 @@ const getEffectiveDueDate = (story: Story) => {
   return upcoming ?? sorted[sorted.length - 1]
 }
 
+const normalizeStatus = (status?: string) => status?.trim().toLowerCase() ?? ''
+
 const OneOnOneFeed = ({
   userFirstName,
 }: {
@@ -165,11 +167,18 @@ const OneOnOneFeed = ({
   }, [stories])
 
   const doneStatus = useMemo(() => {
-    return statusOptions.find((status) => status.toLowerCase() === 'done') ?? 'Done'
+    return statusOptions.find((status) => normalizeStatus(status) === 'done') ?? 'Done'
   }, [statusOptions])
 
+  const doneStatusNormalized = useMemo(
+    () => normalizeStatus(doneStatus),
+    [doneStatus],
+  )
+
   const defaultStatus = useMemo(() => {
-    const firstNonDone = statusOptions.find((status) => status.toLowerCase() !== 'done')
+    const firstNonDone = statusOptions.find(
+      (status) => normalizeStatus(status) !== 'done',
+    )
     return firstNonDone ?? doneStatus
   }, [statusOptions, doneStatus])
 
@@ -396,9 +405,9 @@ const OneOnOneFeed = ({
         (story) =>
           story.epicId === activeEpicId &&
           !story.isDeleted &&
-          story.status.toLowerCase() !== doneStatus.toLowerCase(),
+          normalizeStatus(story.status) !== doneStatusNormalized,
       ),
-    [stories, activeEpicId, doneStatus],
+    [stories, activeEpicId, doneStatusNormalized],
   )
   const nonArchivedEpics = useMemo(() => {
     return epics.filter(
@@ -421,9 +430,9 @@ const OneOnOneFeed = ({
       (story) =>
         selected.has(story.epicId) &&
         !story.isDeleted &&
-        story.status.toLowerCase() !== doneStatus.toLowerCase(),
+        normalizeStatus(story.status) !== doneStatusNormalized,
     )
-  }, [sortedStories, meetingEpicIds, doneStatus])
+  }, [sortedStories, meetingEpicIds, doneStatusNormalized])
   const tabItems = useMemo(
     () => [
       { id: HOME_TAB_ID, label: 'Home' },
