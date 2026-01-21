@@ -418,9 +418,12 @@ const OneOnOneFeed = ({
   const meetingStories = useMemo(() => {
     const selected = new Set(meetingEpicIds)
     return sortedStories.filter(
-      (story) => selected.has(story.epicId) && !story.isDeleted,
+      (story) =>
+        selected.has(story.epicId) &&
+        !story.isDeleted &&
+        story.status.toLowerCase() !== doneStatus.toLowerCase(),
     )
-  }, [sortedStories, meetingEpicIds])
+  }, [sortedStories, meetingEpicIds, doneStatus])
   const tabItems = useMemo(
     () => [
       { id: HOME_TAB_ID, label: 'Home' },
@@ -703,9 +706,9 @@ const OneOnOneFeed = ({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-semibold text-text-primary">To discuss</p>
-                  <span className="text-xs text-text-secondary">
-                    {meetingEpicIds.length}
-                  </span>
+                    <span className="text-xs text-text-secondary">
+                      {meetingStories.length} Stories
+                    </span>
                   </div>
                   <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                     {meetingEpicIds.map((epicId) => {
