@@ -238,6 +238,20 @@ export function StoryDetail({
     }
   };
 
+  const handleDeleteAttachment = async (attachmentId: string, path: string) => {
+    const storageDir = await ensureStorageDir();
+    if (storageDir) {
+      try {
+        const filename = path.split("/").pop() ?? path;
+        await storageDir.removeEntry(filename);
+      } catch (error) {
+        console.error("Failed to delete file from storage", error);
+      }
+    }
+    const next = (story.attachments ?? []).filter((file) => file.id !== attachmentId);
+    onUpdateStory({ ...story, attachments: next });
+  };
+
   return (
     <div className="w-full bg-card border-l border-panel-border flex flex-col h-full shrink-0 animate-slide-in-right">
       {/* Header */}
@@ -517,6 +531,15 @@ export function StoryDetail({
                       {file.name}
                     </button>
                   </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7 text-destructive hover:text-destructive"
+                    onClick={() => handleDeleteAttachment(file.id, file.path)}
+                    title="Remove attachment"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
                 </li>
               ))}
             </ul>
