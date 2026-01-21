@@ -6,6 +6,7 @@ import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
 import Dialog from '../../components/ui/Dialog'
 import RichTextEditor from '../../components/ui/RichTextEditor'
+import { StoryDetail } from '@inbox/components/StoryDetail'
 import type { Epic, Story, StoryComment } from '@inbox/types'
 import { cn } from '@inbox/lib/utils'
 import { loadDb, persistDb } from '../../lib/storage/dbManager'
@@ -87,12 +88,7 @@ const OneOnOneFeed = ({
   const [isEpicPickerOpen, setIsEpicPickerOpen] = useState(false)
   const [epicPickerSelection, setEpicPickerSelection] = useState<string[]>([])
   const [activeEpicId, setActiveEpicId] = useState<string | null>(null)
-  const [newEpicStoryTitle, setNewEpicStoryTitle] = useState('')
-  const [newEpicStoryDueDate, setNewEpicStoryDueDate] = useState('')
-  const [storyTitleDrafts, setStoryTitleDrafts] = useState<Record<string, string>>({})
-  const [storyDueDateDrafts, setStoryDueDateDrafts] = useState<Record<string, string>>(
-    {},
-  )
+  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -156,6 +152,26 @@ const OneOnOneFeed = ({
         .sort((a, b) => lastActivity(b) - lastActivity(a)),
     [stories, commentMap],
   )
+
+  const statusOptions = useMemo(() => {
+    const set = new Set<string>()
+    stories.forEach((story) => {
+      if (story.status) set.add(story.status)
+    })
+    if (![...set].some((status) => status.toLowerCase() === 'done')) {
+      set.add('Done')
+    }
+    return Array.from(set)
+  }, [stories])
+
+  const doneStatus = useMemo(() => {
+    return statusOptions.find((status) => status.toLowerCase() === 'done') ?? 'Done'
+  }, [statusOptions])
+
+  const defaultStatus = useMemo(() => {
+    const firstNonDone = statusOptions.find((status) => status.toLowerCase() !== 'done')
+    return firstNonDone ?? doneStatus
+  }, [statusOptions, doneStatus])
 
   const activeParticipant = useMemo(
     () => participants.find((participant) => participant.id === activeTabId) ?? null,
@@ -338,52 +354,10 @@ const OneOnOneFeed = ({
     handleCancelNoteEdit()
   }
 
-  const handleAddStoryToEpic = async () => {
-    if (!activeEpic || !newEpicStoryTitle.trim()) return
-    const count = stories.filter((story) => story.epicId === activeEpic.id).length
-    const parsedDueDate = newEpicStoryDueDate
-      ? new Date(`${newEpicStoryDueDate}T00:00:00`)
-      : null
-    const nextStory: Story = {
-      id: crypto.randomUUID(),
-      key: `${activeEpic.key}-${count + 100}`,
-      title: newEpicStoryTitle.trim(),
-      description: '',
-      epicId: activeEpic.id,
-      dueDates: parsedDueDate ? [parsedDueDate] : [],
-      status: 'Backlog',
-      priority: 'low',
-      createdAt: new Date(),
-      discussed: false,
-      isDeleted: false,
-      comments: [],
-    }
-    const nextStories = [...stories, nextStory]
-    await persistStories(nextStories)
-    setNewEpicStoryTitle('')
-    setNewEpicStoryDueDate('')
-  }
-
-  const handleRenameStory = async (storyId: string) => {
-    const nextTitle = storyTitleDrafts[storyId]?.trim()
-    if (!nextTitle) return
+  const handleUpdateStory = async (updatedStory: Story) => {
     const nextStories = stories.map((story) =>
-      story.id === storyId ? { ...story, title: nextTitle } : story,
+      story.id === updatedStory.id ? updatedStory : story,
     )
-    await persistStories(nextStories)
-  }
-
-  const handleUpdateStoryDueDate = async (storyId: string) => {
-    const nextDate = storyDueDateDrafts[storyId]
-    const nextStories = stories.map((story) => {
-      if (story.id !== storyId) return story
-      if (!nextDate) {
-        return { ...story, dueDates: [] }
-      }
-      const parsed = new Date(`${nextDate}T00:00:00`)
-      if (Number.isNaN(parsed.getTime())) return story
-      return { ...story, dueDates: [parsed] }
-    })
     await persistStories(nextStories)
   }
   const handleToggleTakeaway = async (
@@ -406,6 +380,15 @@ const OneOnOneFeed = ({
   const activeEpic = useMemo(
     () => epics.find((epic) => epic.id === activeEpicId) ?? null,
     [activeEpicId, epics],
+  )
+  const selectedStory = useMemo(
+    () => stories.find((story) => story.id === selectedStoryId) ?? null,
+    [stories, selectedStoryId],
+  )
+  const selectedStoryEpic = useMemo(
+    () =>
+      selectedStory ? epics.find((epic) => epic.id === selectedStory.epicId) ?? null : null,
+    [epics, selectedStory],
   )
   const activeEpicStories = useMemo(
     () =>
@@ -446,20 +429,6 @@ const OneOnOneFeed = ({
     ],
     [participants],
   )
-
-  useEffect(() => {
-    if (!activeEpicId) return
-    const drafts: Record<string, string> = {}
-    const dueDateDrafts: Record<string, string> = {}
-    activeEpicStories.forEach((story) => {
-      drafts[story.id] = story.title
-      const dueDate =
-        story.dueDates && story.dueDates.length > 0 ? getEffectiveDueDate(story) : null
-      dueDateDrafts[story.id] = dueDate ? dueDate.toISOString().split('T')[0] : ''
-    })
-    setStoryTitleDrafts(drafts)
-    setStoryDueDateDrafts(dueDateDrafts)
-  }, [activeEpicId, activeEpicStories])
 
   useEffect(() => {
     setEditingNoteId(null)
@@ -857,69 +826,61 @@ const OneOnOneFeed = ({
             </div>
             <div className="space-y-2">
               <p className="text-sm font-semibold text-text-primary">Stories</p>
-              <div className="space-y-2">
-                {activeEpicStories.length === 0 ? (
-                  <p className="text-xs text-text-secondary">No stories yet.</p>
-                ) : (
-                  activeEpicStories.map((story) => (
-                    <div key={story.id} className="grid gap-2 md:grid-cols-[1fr,160px]">
-                      <Input
-                        value={storyTitleDrafts[story.id] ?? story.title}
-                        onChange={(e) =>
-                          setStoryTitleDrafts((prev) => ({
-                            ...prev,
-                            [story.id]: e.target.value,
-                          }))
-                        }
-                        onBlur={() => handleRenameStory(story.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            handleRenameStory(story.id)
-                          }
-                        }}
-                      />
-                      <Input
-                        type="date"
-                        value={storyDueDateDrafts[story.id] ?? ''}
-                        onChange={(e) =>
-                          setStoryDueDateDrafts((prev) => ({
-                            ...prev,
-                            [story.id]: e.target.value,
-                          }))
-                        }
-                        onBlur={() => handleUpdateStoryDueDate(story.id)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            handleUpdateStoryDueDate(story.id)
-                          }
-                        }}
-                      />
-                    </div>
-                  ))
-                )}
-              </div>
-              <div className="grid gap-2 md:grid-cols-[1fr,160px,auto]">
-                <Input
-                  placeholder="Add a story title"
-                  value={newEpicStoryTitle}
-                  onChange={(e) => setNewEpicStoryTitle(e.target.value)}
-                />
-                <Input
-                  type="date"
-                  value={newEpicStoryDueDate}
-                  onChange={(e) => setNewEpicStoryDueDate(e.target.value)}
-                />
-                <Button onClick={handleAddStoryToEpic} size="sm">
-                  Add story
-                </Button>
-              </div>
+              {activeEpicStories.length === 0 ? (
+                <p className="text-xs text-text-secondary">No stories yet.</p>
+              ) : (
+                <ol className="space-y-2">
+                  {activeEpicStories.map((story, index) => {
+                    const dueDate = getEffectiveDueDate(story)
+                    return (
+                      <li
+                        key={story.id}
+                        className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
+                      >
+                        <button
+                          className="flex w-full items-center justify-between gap-3 text-left transition hover:text-accent"
+                          onClick={() => setSelectedStoryId(story.id)}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-text-secondary">
+                              {index + 1}.
+                            </span>
+                            <span className="font-semibold underline underline-offset-2">
+                              {story.title || 'Untitled story'}
+                            </span>
+                          </span>
+                          <span className="text-xs text-text-secondary">
+                            Due: {dueDate ? dueDate.toLocaleDateString() : '—'}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ol>
+              )}
             </div>
           </div>
         ) : null}
       </Dialog>
 
+      <Dialog
+        open={Boolean(selectedStory)}
+        onClose={() => setSelectedStoryId(null)}
+        title={selectedStory ? selectedStory.title : undefined}
+        contentClassName="max-w-4xl"
+      >
+        {selectedStory ? (
+          <StoryDetail
+            story={selectedStory}
+            epic={selectedStoryEpic ?? undefined}
+            epics={epics}
+            statusOptions={statusOptions}
+            doneStatus={doneStatus}
+            defaultStatus={defaultStatus}
+            onUpdateStory={handleUpdateStory}
+          />
+        ) : null}
+      </Dialog>
     </>
   )
 }
