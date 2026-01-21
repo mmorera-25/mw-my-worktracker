@@ -74,6 +74,7 @@ export function StoryDetail({
   defaultStatus,
   onUpdateStory,
   onOpenMeetings,
+  onDeleteStory,
 }: StoryDetailProps) {
   const [title, setTitle] = useState(story.title);
   const [description, setDescription] = useState(story.description);
