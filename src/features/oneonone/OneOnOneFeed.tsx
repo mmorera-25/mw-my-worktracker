@@ -838,7 +838,8 @@ const OneOnOneFeed = ({
                         className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
                       >
                         <button
-                          className="flex w-full items-center justify-between gap-3 text-left transition hover:text-accent"
+                          className="grid w-full items-center gap-3 text-left transition hover:text-accent"
+                          style={{ gridTemplateColumns: 'minmax(0, 1fr) 25%' }}
                           onClick={() => setSelectedStoryId(story.id)}
                         >
                           <span className="flex items-center gap-2">
@@ -849,7 +850,7 @@ const OneOnOneFeed = ({
                               {story.title || 'Untitled story'}
                             </span>
                           </span>
-                          <span className="text-xs text-text-secondary">
+                          <span className="text-xs text-text-secondary text-right">
                             Due: {dueDate ? dueDate.toLocaleDateString() : '—'}
                           </span>
                         </button>
