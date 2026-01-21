@@ -418,8 +418,9 @@ const OneOnOneFeed = ({
   }
 
   const handleDeleteStory = async (storyId: string) => {
+    const deletedAt = new Date()
     const nextStories = stories.map((story) =>
-      story.id === storyId ? { ...story, isDeleted: true } : story,
+      story.id === storyId ? { ...story, isDeleted: true, deletedAt } : story,
     )
     await persistStories(nextStories)
     if (selectedStoryId === storyId) {
