@@ -68,6 +68,15 @@ const getEffectiveDueDate = (story: Story) => {
 
 const normalizeStatus = (status?: string) => status?.trim().toLowerCase() ?? ''
 
+const isStoryDone = (story: Story, doneStatusNormalized: string) => {
+  const status = normalizeStatus(story.status)
+  if (status === doneStatusNormalized) return true
+  const doneKeywords = new Set(['done', 'complete', 'completed', 'closed'])
+  if (doneKeywords.has(status)) return true
+  if (story.completedAt) return true
+  return false
+}
+
 const OneOnOneFeed = ({
   userFirstName,
 }: {
@@ -405,7 +414,7 @@ const OneOnOneFeed = ({
         (story) =>
           story.epicId === activeEpicId &&
           !story.isDeleted &&
-          normalizeStatus(story.status) !== doneStatusNormalized,
+          !isStoryDone(story, doneStatusNormalized),
       ),
     [stories, activeEpicId, doneStatusNormalized],
   )
@@ -430,7 +439,7 @@ const OneOnOneFeed = ({
       (story) =>
         selected.has(story.epicId) &&
         !story.isDeleted &&
-        normalizeStatus(story.status) !== doneStatusNormalized,
+        !isStoryDone(story, doneStatusNormalized),
     )
   }, [sortedStories, meetingEpicIds, doneStatusNormalized])
   const tabItems = useMemo(
