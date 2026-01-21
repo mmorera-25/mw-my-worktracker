@@ -52,6 +52,27 @@ const getEffectiveDueDate = (story: Story) => {
   return upcoming ?? sorted[sorted.length - 1];
 };
 
+const renderCommentText = (text: string) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/gi;
+  return text.split(urlRegex).map((part, index) => {
+    const isLink = /^https?:\/\/[^\s]+$/i.test(part);
+    if (isLink) {
+      return (
+        <a
+          key={`link-${index}`}
+          href={part}
+          target="_blank"
+          rel="noreferrer"
+          className="text-primary underline underline-offset-2 break-words"
+        >
+          {part}
+        </a>
+      );
+    }
+    return <span key={`text-${index}`}>{part}</span>;
+  });
+};
+
 export function StoryDetail({
   story,
   epic,
@@ -466,7 +487,9 @@ export function StoryDetail({
                   className="rounded-lg border border-panel-border bg-background/40 px-3 py-2 text-sm"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-foreground">{comment.text}</p>
+                    <p className="text-foreground leading-relaxed break-words">
+                      {renderCommentText(comment.text)}
+                    </p>
                     <div className="flex items-center gap-1">
                       <Button
                         size="icon"
