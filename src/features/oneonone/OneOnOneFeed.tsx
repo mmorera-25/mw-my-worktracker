@@ -24,6 +24,7 @@ const MEETING_PREFS_TAB_ID = 'meeting-preferences'
 const formatRole = (role: MeetingParticipantRole) => {
   if (role === 'management') return 'Manager'
   if (role === 'supervised') return 'Team member'
+  if (role === 'general') return 'General'
   return 'Colleague'
 }
 
@@ -96,6 +97,8 @@ const OneOnOneFeed = ({
   const [editingMeetingSelectedEpicIds, setEditingMeetingSelectedEpicIds] = useState<
     string[]
   >([])
+  const [editingNoteParticipants, setEditingNoteParticipants] = useState<string[]>([])
+  const [editingNoteParticipantInput, setEditingNoteParticipantInput] = useState('')
   const [isEpicPickerOpen, setIsEpicPickerOpen] = useState(false)
   const [epicPickerSelection, setEpicPickerSelection] = useState<string[]>([])
   const [activeEpicId, setActiveEpicId] = useState<string | null>(null)
@@ -282,6 +285,8 @@ const OneOnOneFeed = ({
     setEditingNoteTitle(note.title ?? '')
     setEditingNoteDraft(note.content)
     setEditingMeetingSelectedEpicIds(normalizedEpicIds)
+    setEditingNoteParticipants(note.participants ?? [])
+    setEditingNoteParticipantInput('')
   }
 
   const handleStartMeeting = async () => {
@@ -293,6 +298,8 @@ const OneOnOneFeed = ({
     setEditingNoteTitle('')
     setEditingNoteDraft('')
     setEditingMeetingSelectedEpicIds([])
+    setEditingNoteParticipants([])
+    setEditingNoteParticipantInput('')
   }
 
   const handleCancelNoteEdit = () => {
@@ -301,6 +308,8 @@ const OneOnOneFeed = ({
     setEditingNoteTitle('')
     setEditingNoteDraft('')
     setEditingMeetingSelectedEpicIds([])
+    setEditingNoteParticipants([])
+    setEditingNoteParticipantInput('')
   }
 
   const handleDeleteMeetingNote = async (noteId: string) => {
@@ -324,12 +333,16 @@ const OneOnOneFeed = ({
     if (!activeParticipant) return
     const newNoteId = editingNoteId ? null : crypto.randomUUID()
     const createdAt = editingNoteDate ?? Date.now()
+    const participantsForNote =
+      activeParticipant.role === 'general' ? editingNoteParticipants : undefined
     const next = participants.map((participant) => {
       if (participant.id !== participantId) return participant
       const notes = participant.meetingNotes ?? []
       if (editingNoteId) {
         const existingDiscussed =
           notes.find((note) => note.id === editingNoteId)?.discussedStoryIds ?? []
+        const existingParticipants =
+          notes.find((note) => note.id === editingNoteId)?.participants ?? []
         return {
           ...participant,
           meetingNotes: notes.map((note) =>
@@ -343,6 +356,10 @@ const OneOnOneFeed = ({
                       ? nonArchivedEpics.map((epic) => epic.id)
                       : editingMeetingSelectedEpicIds,
                   discussedStoryIds: existingDiscussed,
+                  participants:
+                    activeParticipant.role === 'general'
+                      ? participantsForNote ?? []
+                      : existingParticipants,
                 }
               : note,
         ),
@@ -361,6 +378,7 @@ const OneOnOneFeed = ({
                 ? nonArchivedEpics.map((epic) => epic.id)
                 : editingMeetingSelectedEpicIds,
             discussedStoryIds: [],
+            participants: participantsForNote,
           },
           ...notes,
         ],
@@ -409,6 +427,19 @@ const OneOnOneFeed = ({
     const nextStories = [nextStory, ...stories]
     await persistStories(nextStories)
     setSelectedStoryId(nextStory.id)
+  }
+
+  const addMeetingParticipantName = () => {
+    const trimmed = editingNoteParticipantInput.trim()
+    if (!trimmed) return
+    setEditingNoteParticipants((prev) =>
+      prev.includes(trimmed) ? prev : [...prev, trimmed],
+    )
+    setEditingNoteParticipantInput('')
+  }
+
+  const removeMeetingParticipantName = (name: string) => {
+    setEditingNoteParticipants((prev) => prev.filter((entry) => entry !== name))
   }
   const handleToggleTakeaway = async (
     storyId: string,
@@ -491,6 +522,8 @@ const OneOnOneFeed = ({
     setEditingNoteDate(null)
     setEditingNoteDraft('')
     setEditingMeetingSelectedEpicIds([])
+    setEditingNoteParticipants([])
+    setEditingNoteParticipantInput('')
   }, [activeTabId])
 
   const exportMarkdown = () => {
@@ -622,6 +655,7 @@ const OneOnOneFeed = ({
                   <option value="management">Manager</option>
                   <option value="normal">Colleague</option>
                   <option value="supervised">Team member</option>
+                  <option value="general">General</option>
                 </Select>
                 <Button onClick={handleAddParticipant}>Add</Button>
               </div>
@@ -727,6 +761,51 @@ const OneOnOneFeed = ({
                     value={editingNoteTitle}
                     onChange={(e) => setEditingNoteTitle(e.target.value)}
                   />
+                  {activeParticipant?.role === 'general' ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-text-primary">Participants</p>
+                        <span className="text-xs text-text-secondary">
+                          {editingNoteParticipants.length} added
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Add participant name"
+                          value={editingNoteParticipantInput}
+                          onChange={(e) => setEditingNoteParticipantInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              addMeetingParticipantName()
+                            }
+                          }}
+                        />
+                        <Button size="sm" onClick={addMeetingParticipantName}>
+                          Add
+                        </Button>
+                      </div>
+                      {editingNoteParticipants.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {editingNoteParticipants.map((name) => (
+                            <span
+                              key={name}
+                              className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-3 py-1 text-xs text-text-primary"
+                            >
+                              {name}
+                              <button
+                                type="button"
+                                className="text-text-secondary hover:text-text-primary"
+                                onClick={() => removeMeetingParticipantName(name)}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <RichTextEditor
                     value={editingNoteDraft}
                     onChange={setEditingNoteDraft}

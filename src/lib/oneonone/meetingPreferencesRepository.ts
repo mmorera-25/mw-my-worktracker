@@ -1,6 +1,6 @@
 import type { Database } from 'sql.js'
 
-export type MeetingParticipantRole = 'management' | 'normal' | 'supervised'
+export type MeetingParticipantRole = 'management' | 'normal' | 'supervised' | 'general'
 
 export type MeetingParticipant = {
   id: string
@@ -18,6 +18,7 @@ export type MeetingNote = {
   selectedEpicIds: string[]
   discussedStoryIds: string[]
   selectedStoryIds?: string[]
+  participants?: string[]
 }
 
 const getJson = (db: Database, key: string) => {
@@ -52,6 +53,9 @@ const normalizeParticipant = (raw: Partial<MeetingParticipant>): MeetingParticip
           discussedStoryIds: Array.isArray(note.discussedStoryIds) ? note.discussedStoryIds : [],
           selectedStoryIds: Array.isArray(note.selectedStoryIds)
             ? note.selectedStoryIds
+            : undefined,
+          participants: Array.isArray(note.participants)
+            ? note.participants.filter((p) => typeof p === 'string').map((p) => p.trim()).filter(Boolean)
             : undefined,
         }))
     : []
