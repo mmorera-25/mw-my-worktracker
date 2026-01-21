@@ -732,7 +732,9 @@ const OneOnOneFeed = ({
                     {meetingEpicIds.map((epicId) => {
                       const epic = epics.find((entry) => entry.id === epicId)
                       if (!epic) return null
-                      const count = stories.filter((story) => story.epicId === epic.id).length
+                      const count = meetingStories.filter(
+                        (story) => story.epicId === epic.id,
+                      ).length
                       return (
                         <Card
                           key={epic.id}
