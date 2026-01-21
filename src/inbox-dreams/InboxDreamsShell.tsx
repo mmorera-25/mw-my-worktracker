@@ -1455,6 +1455,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                   defaultStatus={defaultStatus}
                   onUpdateStory={handleUpdateStory}
                   onOpenMeetings={() => setActiveView("oneonone")}
+                  onDeleteStory={handleDeleteStory}
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center">

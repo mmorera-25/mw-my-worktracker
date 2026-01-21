@@ -417,6 +417,16 @@ const OneOnOneFeed = ({
     await persistStories(nextStories)
   }
 
+  const handleDeleteStory = async (storyId: string) => {
+    const nextStories = stories.map((story) =>
+      story.id === storyId ? { ...story, isDeleted: true } : story,
+    )
+    await persistStories(nextStories)
+    if (selectedStoryId === storyId) {
+      setSelectedStoryId(null)
+    }
+  }
+
   const handleAddStoryForEpic = async () => {
     if (!activeEpic) return
     const now = new Date()
@@ -1102,6 +1112,7 @@ const OneOnOneFeed = ({
             doneStatus={doneStatus}
             defaultStatus={defaultStatus}
             onUpdateStory={handleUpdateStory}
+            onDeleteStory={handleDeleteStory}
           />
         ) : null}
       </Dialog>

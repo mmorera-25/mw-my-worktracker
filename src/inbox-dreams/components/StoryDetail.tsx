@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Calendar, Pencil, Check, X, Paperclip, List, Plus } from "lucide-react";
+import { Calendar, Pencil, Check, X, Paperclip, List, Plus, Trash2 } from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { Button } from "@inbox/components/ui/button";
 import { Input } from "@inbox/components/ui/input";
@@ -27,6 +27,7 @@ interface StoryDetailProps {
   defaultStatus: string;
   onUpdateStory: (story: Story) => void;
   onOpenMeetings?: () => void;
+  onDeleteStory?: (storyId: string) => void;
 }
 
 const getDueDates = (story: Story) => {
@@ -250,6 +251,13 @@ export function StoryDetail({
     }
     const next = (story.attachments ?? []).filter((file) => file.id !== attachmentId);
     onUpdateStory({ ...story, attachments: next });
+  };
+
+  const handleDeleteStory = () => {
+    if (!onDeleteStory) return;
+    const confirmed = window.confirm("Delete this story? This action cannot be undone.");
+    if (!confirmed) return;
+    onDeleteStory(story.id);
   };
 
   return (
@@ -653,6 +661,16 @@ export function StoryDetail({
           >
             <Paperclip className="w-4 h-4" />
             {isUploading ? "Uploading..." : "Add attachment"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex items-center gap-2 text-destructive"
+            onClick={handleDeleteStory}
+            disabled={!onDeleteStory}
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
           </Button>
         </div>
       </div>
