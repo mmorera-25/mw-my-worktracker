@@ -847,35 +847,34 @@ const OneOnOneFeed = ({
                         </div>
                       ) : null}
                       {!isParticipantsInputOpen ? (
-                        <Button
-                          size="sm"
-                          variant="secondary"
+                        <button
+                          type="button"
+                          className="text-sm font-semibold text-primary underline underline-offset-2"
                           onClick={() => setIsParticipantsInputOpen(true)}
                         >
                           Add participants
-                        </Button>
+                        </button>
                       ) : (
-                        <div className="flex gap-2">
-                          <Input
-                            autoFocus
-                            placeholder="Add participant name"
-                            value={editingNoteParticipantInput}
-                            onChange={(e) => setEditingNoteParticipantInput(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                addMeetingParticipantName()
-                              }
-                              if (e.key === 'Escape') {
-                                setIsParticipantsInputOpen(false)
-                                setEditingNoteParticipantInput('')
-                              }
-                            }}
-                          />
-                          <Button size="sm" onClick={addMeetingParticipantName}>
-                            Add
-                          </Button>
-                        </div>
+                        <Input
+                          autoFocus
+                          placeholder="Add participant name"
+                          value={editingNoteParticipantInput}
+                          onChange={(e) => setEditingNoteParticipantInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              addMeetingParticipantName()
+                            }
+                            if (e.key === 'Escape') {
+                              setIsParticipantsInputOpen(false)
+                              setEditingNoteParticipantInput('')
+                            }
+                          }}
+                          onBlur={() => {
+                            setIsParticipantsInputOpen(false)
+                            setEditingNoteParticipantInput('')
+                          }}
+                        />
                       )}
                     </div>
                   ) : null}
