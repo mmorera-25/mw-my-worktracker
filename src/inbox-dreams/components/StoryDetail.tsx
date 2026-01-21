@@ -232,7 +232,21 @@ export function StoryDetail({
       const fileHandle = await storageDir.getFileHandle(filename, { create: false });
       const file = await fileHandle.getFile();
       const url = URL.createObjectURL(file);
-      window.open(url, "_blank");
+      const isPdf =
+        file.type === "application/pdf" ||
+        filename.toLowerCase().endsWith(".pdf");
+      if (isPdf) {
+        const viewer = window.open("", "_blank");
+        if (viewer) {
+          viewer.document.write(
+            `<iframe src="${url}#toolbar=1" style="width:100%;height:100%;border:0;"></iframe>`
+          );
+        } else {
+          window.open(url, "_blank");
+        }
+      } else {
+        window.open(url, "_blank");
+      }
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (error) {
       console.error("Failed to open attachment", error);
