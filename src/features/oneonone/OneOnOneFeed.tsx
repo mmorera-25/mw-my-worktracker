@@ -78,6 +78,8 @@ const isStoryDone = (story: Story, doneStatusNormalized: string) => {
   return false
 }
 
+const BASE_STATUSES = ['Backlog', 'Scheduled', 'To Ask', 'To Do', 'Doing', 'Done']
+
 const OneOnOneFeed = ({
   userFirstName,
 }: {
@@ -169,13 +171,10 @@ const OneOnOneFeed = ({
   )
 
   const statusOptions = useMemo(() => {
-    const set = new Set<string>()
+    const set = new Set<string>(BASE_STATUSES)
     stories.forEach((story) => {
       if (story.status) set.add(story.status)
     })
-    if (![...set].some((status) => status.toLowerCase() === 'done')) {
-      set.add('Done')
-    }
     return Array.from(set)
   }, [stories])
 
