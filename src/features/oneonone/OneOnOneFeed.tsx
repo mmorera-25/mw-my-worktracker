@@ -223,6 +223,16 @@ const OneOnOneFeed = ({
     await persistDb(ctx)
   }
 
+  const handleUpdateParticipant = async (
+    participantId: string,
+    updates: Partial<MeetingParticipant>,
+  ) => {
+    const next = participants.map((participant) =>
+      participant.id === participantId ? { ...participant, ...updates } : participant,
+    )
+    await persistParticipants(next)
+  }
+
   const updateMeetingSelection = async (nextSelected: string[]) => {
     setEditingMeetingSelectedEpicIds(nextSelected)
     if (!activeParticipant || !editingNoteId) return
@@ -631,21 +641,21 @@ const OneOnOneFeed = ({
               </div>
             )}
           </Card>
-        ) : activeTabId === MEETING_PREFS_TAB_ID ? (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr),minmax(0,1fr)]">
-            <Card className="p-4 space-y-3">
-              <div>
-                <p className="text-sm font-semibold text-text-primary">Add person</p>
+            ) : activeTabId === MEETING_PREFS_TAB_ID ? (
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr),minmax(0,1fr)]">
+                <Card className="p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">Add person</p>
                 <p className="text-xs text-text-secondary">
                   Create a meeting tab and set their default role.
                 </p>
               </div>
-              <div className="grid gap-2 md:grid-cols-[1fr,180px,auto]">
-                <Input
-                  placeholder="Name"
-                  value={newParticipantName}
-                  onChange={(e) => setNewParticipantName(e.target.value)}
-                />
+                  <div className="grid gap-2 md:grid-cols-[1fr,180px,auto]">
+                    <Input
+                      placeholder="Name"
+                      value={newParticipantName}
+                      onChange={(e) => setNewParticipantName(e.target.value)}
+                    />
                 <Select
                   value={newParticipantRole}
                   onChange={(e) =>
@@ -656,12 +666,57 @@ const OneOnOneFeed = ({
                   <option value="normal">Colleague</option>
                   <option value="supervised">Team member</option>
                   <option value="general">General</option>
-                </Select>
-                <Button onClick={handleAddParticipant}>Add</Button>
+                    </Select>
+                    <Button onClick={handleAddParticipant}>Add</Button>
+                  </div>
+                </Card>
+                <Card className="p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">Current people</p>
+                    <p className="text-xs text-text-secondary">
+                      Edit names or roles for existing meeting participants.
+                    </p>
+                  </div>
+                  {participants.length === 0 ? (
+                    <p className="text-sm text-text-secondary">No meeting participants yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {participants.map((participant) => (
+                        <div
+                          key={participant.id}
+                          className="grid gap-2 md:grid-cols-[1fr,200px,auto] items-center rounded-xl border border-border bg-surface-2 px-3 py-2"
+                        >
+                          <Input
+                            value={participant.name}
+                            onChange={async (e) =>
+                              handleUpdateParticipant(participant.id, {
+                                name: e.target.value,
+                              })
+                            }
+                          />
+                          <Select
+                            value={participant.role}
+                            onChange={async (e) =>
+                              handleUpdateParticipant(participant.id, {
+                                role: e.target.value as MeetingParticipantRole,
+                              })
+                            }
+                          >
+                            <option value="management">Manager</option>
+                            <option value="normal">Colleague</option>
+                            <option value="supervised">Team member</option>
+                            <option value="general">General</option>
+                          </Select>
+                          <span className="text-[11px] text-text-secondary text-right">
+                            {(participant.meetingNotes?.length ?? 0)} meetings
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
               </div>
-            </Card>
-          </div>
-        ) : activeParticipant ? (
+            ) : activeParticipant ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
