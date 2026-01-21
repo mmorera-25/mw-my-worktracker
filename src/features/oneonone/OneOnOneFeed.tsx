@@ -191,6 +191,14 @@ const OneOnOneFeed = ({
     return firstNonDone ?? doneStatus
   }, [statusOptions, doneStatus])
 
+  const getNewStoryStatus = () => {
+    const firstNonDone = statusOptions.find(
+      (status) => normalizeStatus(status) !== doneStatusNormalized,
+    )
+    if (firstNonDone) return firstNonDone
+    return 'To Do'
+  }
+
   const activeParticipant = useMemo(
     () => participants.find((participant) => participant.id === activeTabId) ?? null,
     [participants, activeTabId],
@@ -377,6 +385,30 @@ const OneOnOneFeed = ({
       story.id === updatedStory.id ? updatedStory : story,
     )
     await persistStories(nextStories)
+  }
+
+  const handleAddStoryForEpic = async () => {
+    if (!activeEpic) return
+    const now = new Date()
+    const count = stories.filter((story) => story.epicId === activeEpic.id).length
+    const status = getNewStoryStatus()
+    const nextStory: Story = {
+      id: crypto.randomUUID(),
+      key: `${activeEpic.key}-${count + 1}`,
+      title: 'New Story',
+      description: '',
+      epicId: activeEpic.id,
+      dueDates: [],
+      status,
+      priority: 'low',
+      createdAt: now,
+      discussed: false,
+      isDeleted: false,
+      comments: [],
+    }
+    const nextStories = [nextStory, ...stories]
+    await persistStories(nextStories)
+    setSelectedStoryId(nextStory.id)
   }
   const handleToggleTakeaway = async (
     storyId: string,
@@ -855,35 +887,45 @@ const OneOnOneFeed = ({
               {activeEpicStories.length === 0 ? (
                 <p className="text-xs text-text-secondary">No stories yet.</p>
               ) : (
-                <ol className="space-y-2">
-                  {activeEpicStories.map((story, index) => {
-                    const dueDate = getEffectiveDueDate(story)
-                    return (
-                      <li
-                        key={story.id}
-                        className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-                      >
-                        <button
-                          className="grid w-full items-center gap-3 text-left transition hover:text-accent"
-                          style={{ gridTemplateColumns: 'minmax(0, 1fr) 25%' }}
-                          onClick={() => setSelectedStoryId(story.id)}
+                <>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-text-secondary">
+                      {activeEpicStories.length} open stor{activeEpicStories.length === 1 ? 'y' : 'ies'}
+                    </p>
+                    <Button size="sm" onClick={handleAddStoryForEpic}>
+                      Add story
+                    </Button>
+                  </div>
+                  <ol className="space-y-2">
+                    {activeEpicStories.map((story, index) => {
+                      const dueDate = getEffectiveDueDate(story)
+                      return (
+                        <li
+                          key={story.id}
+                          className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
                         >
-                          <span className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-text-secondary">
-                              {index + 1}.
+                          <button
+                            className="grid w-full items-center gap-3 text-left transition hover:text-accent"
+                            style={{ gridTemplateColumns: 'minmax(0, 1fr) 25%' }}
+                            onClick={() => setSelectedStoryId(story.id)}
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className="text-xs font-semibold text-text-secondary">
+                                {index + 1}.
+                              </span>
+                              <span className="font-semibold underline underline-offset-2">
+                                {story.title || 'Untitled story'}
+                              </span>
                             </span>
-                            <span className="font-semibold underline underline-offset-2">
-                              {story.title || 'Untitled story'}
+                            <span className="text-xs text-text-secondary text-right">
+                              Due: {dueDate ? dueDate.toLocaleDateString() : '—'}
                             </span>
-                          </span>
-                          <span className="text-xs text-text-secondary text-right">
-                            Due: {dueDate ? dueDate.toLocaleDateString() : '—'}
-                          </span>
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ol>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ol>
+                </>
               )}
             </div>
           </div>
