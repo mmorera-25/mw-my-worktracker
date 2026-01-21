@@ -99,6 +99,7 @@ const OneOnOneFeed = ({
   >([])
   const [editingNoteParticipants, setEditingNoteParticipants] = useState<string[]>([])
   const [editingNoteParticipantInput, setEditingNoteParticipantInput] = useState('')
+  const [isParticipantsInputOpen, setIsParticipantsInputOpen] = useState(false)
   const [isEpicPickerOpen, setIsEpicPickerOpen] = useState(false)
   const [epicPickerSelection, setEpicPickerSelection] = useState<string[]>([])
   const [activeEpicId, setActiveEpicId] = useState<string | null>(null)
@@ -310,6 +311,7 @@ const OneOnOneFeed = ({
     setEditingMeetingSelectedEpicIds([])
     setEditingNoteParticipants([])
     setEditingNoteParticipantInput('')
+    setIsParticipantsInputOpen(false)
   }
 
   const handleCancelNoteEdit = () => {
@@ -320,6 +322,7 @@ const OneOnOneFeed = ({
     setEditingMeetingSelectedEpicIds([])
     setEditingNoteParticipants([])
     setEditingNoteParticipantInput('')
+    setIsParticipantsInputOpen(false)
   }
 
   const handleDeleteMeetingNote = async (noteId: string) => {
@@ -824,22 +827,6 @@ const OneOnOneFeed = ({
                           {editingNoteParticipants.length} added
                         </span>
                       </div>
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Add participant name"
-                          value={editingNoteParticipantInput}
-                          onChange={(e) => setEditingNoteParticipantInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault()
-                              addMeetingParticipantName()
-                            }
-                          }}
-                        />
-                        <Button size="sm" onClick={addMeetingParticipantName}>
-                          Add
-                        </Button>
-                      </div>
                       {editingNoteParticipants.length > 0 ? (
                         <div className="flex flex-wrap gap-2">
                           {editingNoteParticipants.map((name) => (
@@ -859,6 +846,37 @@ const OneOnOneFeed = ({
                           ))}
                         </div>
                       ) : null}
+                      {!isParticipantsInputOpen ? (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setIsParticipantsInputOpen(true)}
+                        >
+                          Add participants
+                        </Button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Input
+                            autoFocus
+                            placeholder="Add participant name"
+                            value={editingNoteParticipantInput}
+                            onChange={(e) => setEditingNoteParticipantInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                addMeetingParticipantName()
+                              }
+                              if (e.key === 'Escape') {
+                                setIsParticipantsInputOpen(false)
+                                setEditingNoteParticipantInput('')
+                              }
+                            }}
+                          />
+                          <Button size="sm" onClick={addMeetingParticipantName}>
+                            Add
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   ) : null}
                   <RichTextEditor
