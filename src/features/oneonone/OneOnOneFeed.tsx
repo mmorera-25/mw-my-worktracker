@@ -393,9 +393,12 @@ const OneOnOneFeed = ({
   const activeEpicStories = useMemo(
     () =>
       stories.filter(
-        (story) => story.epicId === activeEpicId && !story.isDeleted,
+        (story) =>
+          story.epicId === activeEpicId &&
+          !story.isDeleted &&
+          story.status.toLowerCase() !== doneStatus.toLowerCase(),
       ),
-    [stories, activeEpicId],
+    [stories, activeEpicId, doneStatus],
   )
   const nonArchivedEpics = useMemo(() => {
     return epics.filter(
