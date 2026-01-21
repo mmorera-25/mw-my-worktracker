@@ -1,15 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  Calendar,
-  MoreHorizontal,
-  Pencil,
-  Check,
-  X,
-  MessageSquare,
-  Paperclip,
-  List,
-  Plus,
-} from "lucide-react";
+import { Calendar, Pencil, Check, X, Paperclip, List, Plus } from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { Button } from "@inbox/components/ui/button";
 import { Input } from "@inbox/components/ui/input";
@@ -210,11 +200,6 @@ export function StoryDetail({
               {dueLabel}
             </span>
           </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <MoreHorizontal className="w-4 h-4" />
-          </Button>
         </div>
       </div>
 
@@ -532,12 +517,6 @@ export function StoryDetail({
         <div className="flex items-center gap-1 ml-auto">
           <Button variant="ghost" size="icon" className="h-8 w-8">
             <Paperclip className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <MessageSquare className="w-4 h-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <MoreHorizontal className="w-4 h-4" />
           </Button>
         </div>
       </div>
