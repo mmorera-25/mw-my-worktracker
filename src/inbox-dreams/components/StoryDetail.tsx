@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Calendar, Pencil, Check, X, Paperclip, List, Plus, Trash2 } from "lucide-react";
+import { Calendar, Pencil, Check, X, Paperclip, List, Plus, Trash2, Globe } from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { Button } from "@inbox/components/ui/button";
 import { Input } from "@inbox/components/ui/input";
@@ -686,7 +686,7 @@ export function StoryDetail({
             className="flex items-center gap-2"
             onClick={handleAddLink}
           >
-            <Paperclip className="w-4 h-4" />
+            <Globe className="w-4 h-4" />
             Add link
           </Button>
           <input
