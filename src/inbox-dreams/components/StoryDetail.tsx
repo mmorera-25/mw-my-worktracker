@@ -668,37 +668,6 @@ export function StoryDetail({
               {comments.length}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <Button size="icon" variant="ghost" onClick={openNewComment} title="Add comment">
-              <Plus className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleAddLink}
-              title="Add link"
-            >
-              <Globe className="w-4 h-4" />
-            </Button>
-            <input
-              type="file"
-              className="hidden"
-              id="story-attachment-input"
-              onChange={handleAttachFile}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                const input = document.getElementById("story-attachment-input") as HTMLInputElement | null;
-                input?.click();
-              }}
-              disabled={isUploading}
-              title="Add attachment"
-            >
-              <Paperclip className="w-4 h-4" />
-            </Button>
-          </div>
           <div className="space-y-2">
             {comments.length === 0 ? (
               <p className="text-sm text-muted-foreground">No comments yet.</p>
