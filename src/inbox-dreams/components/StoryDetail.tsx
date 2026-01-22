@@ -312,64 +312,24 @@ export function StoryDetail({
             }}
             className="h-5 w-5"
           />
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-muted-foreground" />
-              <span
-                className={cn(
-                  "text-sm font-medium",
-                  isOverdue ? "text-destructive" : "text-primary"
-                )}
-              >
-                {format(effectiveDueDate, "d MMM")}
-              </span>
-              <span
-                className={cn(
-                  "text-xs font-semibold",
-                  dueDays < 0 ? "text-destructive" : "text-muted-foreground"
-                )}
-              >
-                {dueLabel}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleAddLink}
-                title="Add link"
-              >
-                <Globe className="w-4 h-4" />
-              </Button>
-              <input
-                type="file"
-                className="hidden"
-                id="story-attachment-input"
-                onChange={handleAttachFile}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  const input = document.getElementById("story-attachment-input") as HTMLInputElement | null;
-                  input?.click();
-                }}
-                disabled={isUploading}
-                title="Add attachment"
-              >
-                <Paperclip className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-destructive"
-                onClick={handleDeleteStory}
-                disabled={!onDeleteStory}
-                title="Delete story"
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </div>
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-muted-foreground" />
+            <span
+              className={cn(
+                "text-sm font-medium",
+                isOverdue ? "text-destructive" : "text-primary"
+              )}
+            >
+              {format(effectiveDueDate, "d MMM")}
+            </span>
+            <span
+              className={cn(
+                "text-xs font-semibold",
+                dueDays < 0 ? "text-destructive" : "text-muted-foreground"
+              )}
+            >
+              {dueLabel}
+            </span>
           </div>
         </div>
       </div>
@@ -599,7 +559,7 @@ export function StoryDetail({
 
         {/* Attachments */}
         <div className="mb-6 space-y-2">
-          <p className="text-[11px] uppercase text-muted-foreground">Attachments</p>
+          <p className="text-[11px] uppercase text-muted-foreground">Attachments / Links</p>
           {(story.attachments ?? []).length === 0 ? (
             <p className="text-sm text-muted-foreground">No attachments yet.</p>
           ) : (
@@ -664,9 +624,35 @@ export function StoryDetail({
               {comments.length}
             </span>
           </div>
-          <div className="flex justify-start">
-            <Button size="sm" onClick={openNewComment}>
-              Add comment
+          <div className="flex items-center gap-2">
+            <Button size="icon" variant="ghost" onClick={openNewComment} title="Add comment">
+              <Plus className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleAddLink}
+              title="Add link"
+            >
+              <Globe className="w-4 h-4" />
+            </Button>
+            <input
+              type="file"
+              className="hidden"
+              id="story-attachment-input"
+              onChange={handleAttachFile}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                const input = document.getElementById("story-attachment-input") as HTMLInputElement | null;
+                input?.click();
+              }}
+              disabled={isUploading}
+              title="Add attachment"
+            >
+              <Paperclip className="w-4 h-4" />
             </Button>
           </div>
           <div className="space-y-2">
