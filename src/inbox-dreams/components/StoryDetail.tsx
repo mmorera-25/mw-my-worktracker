@@ -17,7 +17,6 @@ import { Input } from "@inbox/components/ui/input";
 import { Checkbox } from "@inbox/components/ui/checkbox";
 import RichTextEditor from "../../components/ui/RichTextEditor";
 import Dialog from "../../components/ui/Dialog";
-import TextArea from "../../components/ui/TextArea";
 import {
   Select,
   SelectContent,
@@ -158,17 +157,17 @@ export function StoryDetail({
   };
 
   const saveComment = () => {
-    const trimmed = editingCommentText.trim();
-    if (!trimmed) return;
+    const textOnly = editingCommentText.replace(/<[^>]*>/g, "").trim();
+    if (!textOnly) return;
     if (editingCommentId) {
       const next = comments.map((comment) =>
-        comment.id === editingCommentId ? { ...comment, text: trimmed } : comment
+        comment.id === editingCommentId ? { ...comment, text: editingCommentText } : comment
       );
       onUpdateStory({ ...story, comments: next });
     } else {
       const next = [
         ...comments,
-        { id: String(Date.now()), text: trimmed, createdAt: new Date() },
+        { id: String(Date.now()), text: editingCommentText, createdAt: new Date() },
       ];
       onUpdateStory({ ...story, comments: next });
     }
@@ -643,16 +642,20 @@ export function StoryDetail({
           title={editingCommentId ? "Edit comment" : "Add comment"}
         >
           <div className="space-y-4">
-            <TextArea
+            <RichTextEditor
               value={editingCommentText}
-              onChange={(e) => setEditingCommentText(e.target.value)}
+              onChange={(value) => setEditingCommentText(value)}
               placeholder="Write your comment"
             />
             <div className="flex justify-end gap-2">
               <Button size="sm" variant="ghost" onClick={closeCommentModal}>
                 Cancel
               </Button>
-              <Button size="sm" onClick={saveComment} disabled={!editingCommentText.trim()}>
+              <Button
+                size="sm"
+                onClick={saveComment}
+                disabled={!editingCommentText.replace(/<[^>]*>/g, "").trim()}
+              >
                 Save
               </Button>
             </div>
@@ -678,9 +681,10 @@ export function StoryDetail({
                   className="rounded-lg border border-panel-border bg-background/40 px-3 py-2 text-sm"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-foreground leading-relaxed break-words">
-                      {renderCommentText(comment.text)}
-                    </p>
+                    <div
+                      className="text-foreground leading-relaxed break-words rich-text-content"
+                      dangerouslySetInnerHTML={{ __html: comment.text }}
+                    />
                     <div className="flex items-center gap-1">
                       <Button
                         size="icon"
