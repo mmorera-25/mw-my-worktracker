@@ -225,6 +225,11 @@ export function StoryDetail({
   };
 
   const handleOpenAttachment = async (path: string) => {
+    const isLink = path.startsWith("http://") || path.startsWith("https://");
+    if (isLink) {
+      window.open(path, "_blank");
+      return;
+    }
     const storageDir = await ensureStorageDir();
     if (!storageDir) return;
     try {
@@ -273,6 +278,23 @@ export function StoryDetail({
     const confirmed = window.confirm("Delete this story? This action cannot be undone.");
     if (!confirmed) return;
     onDeleteStory(story.id);
+  };
+
+  const handleAddLink = () => {
+    const url = window.prompt("Enter link URL (https://...)")?.trim();
+    if (!url) return;
+    const name =
+      window.prompt("Enter a label for this link (optional)")?.trim() ||
+      url.replace(/^https?:\/\//, "");
+    const nextAttachments = [
+      ...(story.attachments ?? []),
+      {
+        id: crypto.randomUUID(),
+        name,
+        path: url,
+      },
+    ];
+    onUpdateStory({ ...story, attachments: nextAttachments });
   };
 
   return (
@@ -658,6 +680,15 @@ export function StoryDetail({
           </div>
         )}
         <div className="flex items-center gap-2 ml-auto">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="flex items-center gap-2"
+            onClick={handleAddLink}
+          >
+            <Paperclip className="w-4 h-4" />
+            Add link
+          </Button>
           <input
             type="file"
             className="hidden"
