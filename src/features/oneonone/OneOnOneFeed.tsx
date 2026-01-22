@@ -1102,7 +1102,7 @@ const OneOnOneFeed = ({
         open={Boolean(selectedStory)}
         onClose={() => setSelectedStoryId(null)}
         title={selectedStory ? selectedStory.title : undefined}
-        contentClassName="max-w-5xl"
+        contentClassName="max-w-6xl h-[85vh]"
       >
         {selectedStory ? (
           <StoryDetail
