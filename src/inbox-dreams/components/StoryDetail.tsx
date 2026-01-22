@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { Calendar, Pencil, Check, X, Paperclip, List, Plus, Trash2, Globe } from "lucide-react";
+import {
+  Calendar,
+  Pencil,
+  Check,
+  X,
+  Paperclip,
+  List,
+  Plus,
+  Trash2,
+  Globe,
+  MessageSquare,
+} from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { Button } from "@inbox/components/ui/button";
 import { Input } from "@inbox/components/ui/input";
@@ -555,6 +566,39 @@ export function StoryDetail({
               )}
             </div>
           )}
+        </div>
+
+        {/* Quick actions */}
+        <div className="mb-6 flex items-center gap-2">
+          <Button size="icon" variant="ghost" onClick={openNewComment} title="Add comment">
+            <MessageSquare className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleAddLink}
+            title="Add link"
+          >
+            <Globe className="w-4 h-4" />
+          </Button>
+          <input
+            type="file"
+            className="hidden"
+            id="story-attachment-input"
+            onChange={handleAttachFile}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              const input = document.getElementById("story-attachment-input") as HTMLInputElement | null;
+              input?.click();
+            }}
+            disabled={isUploading}
+            title="Add attachment"
+          >
+            <Paperclip className="w-4 h-4" />
+          </Button>
         </div>
 
         {/* Attachments */}
