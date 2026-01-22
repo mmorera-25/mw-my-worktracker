@@ -36,7 +36,7 @@ const Dialog = ({ open, onClose, title, children, contentClassName }: DialogProp
     >
       <Card
         className={clsx(
-          "w-full max-w-lg border-border bg-surface p-6 shadow-[var(--shadow-soft)]",
+          "w-full max-w-lg border-border bg-surface p-6 shadow-[var(--shadow-soft)] flex flex-col max-h-[90vh] overflow-hidden",
           contentClassName
         )}
         onClick={(e) => e.stopPropagation()}
@@ -55,7 +55,9 @@ const Dialog = ({ open, onClose, title, children, contentClassName }: DialogProp
             ✕
           </button>
         </div>
-        <div className="mt-4 text-text-primary">{children}</div>
+        <div className="mt-4 text-text-primary flex-1 min-h-0 overflow-y-auto">
+          {children}
+        </div>
       </Card>
     </div>,
     el,
