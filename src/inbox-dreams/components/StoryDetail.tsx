@@ -682,12 +682,11 @@ export function StoryDetail({
         <div className="flex items-center gap-2 ml-auto">
           <Button
             variant="ghost"
-            size="sm"
-            className="flex items-center gap-2"
+            size="icon"
             onClick={handleAddLink}
+            title="Add link"
           >
             <Globe className="w-4 h-4" />
-            Add link
           </Button>
           <input
             type="file"
@@ -697,26 +696,25 @@ export function StoryDetail({
           />
           <Button
             variant="ghost"
-            size="sm"
-            className="flex items-center gap-2"
+            size="icon"
             onClick={() => {
               const input = document.getElementById("story-attachment-input") as HTMLInputElement | null;
               input?.click();
             }}
             disabled={isUploading}
+            title="Add attachment"
           >
             <Paperclip className="w-4 h-4" />
-            {isUploading ? "Uploading..." : "Add attachment"}
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            className="flex items-center gap-2 text-destructive"
+            size="icon"
+            className="text-destructive"
             onClick={handleDeleteStory}
             disabled={!onDeleteStory}
+            title="Delete story"
           >
             <Trash2 className="w-4 h-4" />
-            Delete
           </Button>
         </div>
       </div>
