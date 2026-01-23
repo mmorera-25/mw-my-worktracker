@@ -46,6 +46,7 @@ export function StoryListItem({
 }: StoryListItemProps) {
   const effectiveDueDate = getEffectiveDueDate(story);
   const completedDate = story.completedAt;
+  const isCompleted = story.status === doneStatus;
   const displayDate = isCompleted && completedDate ? completedDate : effectiveDueDate;
   const isDueToday = isToday(displayDate);
   const isOverdue =
