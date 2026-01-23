@@ -732,44 +732,6 @@ export function StoryDetail({
             <span className="text-sm text-muted-foreground">{epic.name}</span>
           </div>
         )}
-        <div className="flex items-center gap-2 ml-auto">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={handleAddLink}
-            title="Add link"
-          >
-            <Globe className="w-4 h-4" />
-          </Button>
-          <input
-            type="file"
-            className="hidden"
-            id="story-attachment-input"
-            onChange={handleAttachFile}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              const input = document.getElementById("story-attachment-input") as HTMLInputElement | null;
-              input?.click();
-            }}
-            disabled={isUploading}
-            title="Add attachment"
-          >
-            <Paperclip className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-destructive"
-            onClick={handleDeleteStory}
-            disabled={!onDeleteStory}
-            title="Delete story"
-          >
-            <Trash2 className="w-4 h-4" />
-          </Button>
-        </div>
       </div>
       <Dialog
         open={isLinkModalOpen}
