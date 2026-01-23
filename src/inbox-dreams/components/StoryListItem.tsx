@@ -52,7 +52,6 @@ export function StoryListItem({
   const isOverdue =
     !isCompleted && isPast(displayDate) && !isDueToday;
   const isDoneDisplay = isCompleted && completedDate;
-  const isCompleted = story.status === doneStatus;
 
   return (
     <div
