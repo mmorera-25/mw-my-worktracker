@@ -45,8 +45,12 @@ export function StoryListItem({
   isCompletedView,
 }: StoryListItemProps) {
   const effectiveDueDate = getEffectiveDueDate(story);
-  const isDueToday = isToday(effectiveDueDate);
-  const isOverdue = isPast(effectiveDueDate) && !isDueToday;
+  const completedDate = story.completedAt;
+  const displayDate = isCompleted && completedDate ? completedDate : effectiveDueDate;
+  const isDueToday = isToday(displayDate);
+  const isOverdue =
+    !isCompleted && isPast(displayDate) && !isDueToday;
+  const isDoneDisplay = isCompleted && completedDate;
   const isCompleted = story.status === doneStatus;
 
   return (
@@ -150,7 +154,9 @@ export function StoryListItem({
               <span
                 className={cn(
                   "flex h-12 w-12 flex-col items-center justify-center rounded-md border text-[10px] font-semibold leading-tight",
-                  isDueToday
+                  isDoneDisplay
+                    ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-700"
+                    : isDueToday
                     ? "border-yellow-500/60 bg-yellow-500/15 text-yellow-700"
                     : isOverdue
                     ? "border-destructive/50 bg-destructive/10 text-destructive"
@@ -160,13 +166,17 @@ export function StoryListItem({
                 <span
                   className={cn(
                     "text-lg font-semibold leading-none",
-                    isDueToday ? "text-yellow-700" : "text-blue-600"
+                    isDoneDisplay
+                      ? "text-emerald-700"
+                      : isDueToday
+                      ? "text-yellow-700"
+                      : "text-blue-600"
                   )}
                 >
-                  {format(effectiveDueDate, "d")}
+                  {format(displayDate, "d")}
                 </span>
                 <span className="text-[10px] font-semibold">
-                  {format(effectiveDueDate, "EEE").toUpperCase()}
+                  {format(displayDate, "EEE").toUpperCase()}
                 </span>
               </span>
             </div>
