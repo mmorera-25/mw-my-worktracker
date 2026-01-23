@@ -3,13 +3,13 @@ import {
   Calendar,
   Pencil,
   Check,
-  X,
   Paperclip,
   List,
   Plus,
   Trash2,
   Globe,
   MessageSquare,
+  XCircle,
 } from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { Button } from "@inbox/components/ui/button";
@@ -94,6 +94,9 @@ export function StoryDetail({
   const [editingCommentText, setEditingCommentText] = useState("");
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [linkTitle, setLinkTitle] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
 
   useEffect(() => {
     setTitle(story.title);
@@ -291,11 +294,9 @@ export function StoryDetail({
   };
 
   const handleAddLink = () => {
-    const url = window.prompt("Enter link URL (https://...)")?.trim();
-    if (!url) return;
-    const name =
-      window.prompt("Enter a label for this link (optional)")?.trim() ||
-      url.replace(/^https?:\/\//, "");
+    const url = linkUrl.trim();
+    if (!url || !(url.startsWith("http://") || url.startsWith("https://"))) return;
+    const name = linkTitle.trim() || url.replace(/^https?:\/\//, "");
     const nextAttachments = [
       ...(story.attachments ?? []),
       {
@@ -305,6 +306,9 @@ export function StoryDetail({
       },
     ];
     onUpdateStory({ ...story, attachments: nextAttachments });
+    setLinkTitle("");
+    setLinkUrl("");
+    setIsLinkModalOpen(false);
   };
 
   return (
@@ -575,7 +579,7 @@ export function StoryDetail({
           <Button
             variant="ghost"
             size="icon"
-            onClick={handleAddLink}
+            onClick={() => setIsLinkModalOpen(true)}
             title="Add link"
           >
             <Globe className="w-4 h-4" />
@@ -613,7 +617,11 @@ export function StoryDetail({
                   className="flex items-center justify-between rounded-md border border-panel-border/70 bg-background/60 px-3 py-2 text-sm"
                 >
                   <div className="flex items-center gap-2">
-                    <Paperclip className="w-4 h-4 text-muted-foreground" />
+                    {file.path.startsWith("http://") || file.path.startsWith("https://") ? (
+                      <Globe className="w-4 h-4 text-muted-foreground" />
+                    ) : (
+                      <Paperclip className="w-4 h-4 text-muted-foreground" />
+                    )}
                     <button
                       className="text-primary underline underline-offset-2"
                       onClick={() => handleOpenAttachment(file.path)}
@@ -624,11 +632,11 @@ export function StoryDetail({
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="h-7 w-7 text-destructive hover:text-destructive"
+                    className="h-7 w-7 text-foreground"
                     onClick={() => handleDeleteAttachment(file.id, file.path)}
                     title="Remove attachment"
                   >
-                    <X className="w-4 h-4" />
+                    <XCircle className="w-4 h-4" />
                   </Button>
                 </li>
               ))}
@@ -698,11 +706,11 @@ export function StoryDetail({
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="h-7 w-7 text-destructive hover:text-destructive"
+                        className="h-7 w-7 text-foreground"
                         onClick={() => handleDeleteComment(comment.id)}
                         title="Delete comment"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <XCircle className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
@@ -763,6 +771,44 @@ export function StoryDetail({
           </Button>
         </div>
       </div>
+      <Dialog
+        open={isLinkModalOpen}
+        onClose={() => setIsLinkModalOpen(false)}
+        title="Add link"
+      >
+        <div className="space-y-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs uppercase text-muted-foreground">Link title</span>
+            <Input
+              value={linkTitle}
+              onChange={(e) => setLinkTitle(e.target.value)}
+              placeholder="Optional title"
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs uppercase text-muted-foreground">Link URL</span>
+            <Input
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://example.com"
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setIsLinkModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddLink}
+              disabled={
+                !linkUrl.trim() ||
+                !(linkUrl.trim().startsWith("http://") || linkUrl.trim().startsWith("https://"))
+              }
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }
