@@ -28,6 +28,7 @@ interface StoryListProps {
   onCompletedDateChange: (storyId: string, completedAt?: Date) => void;
   viewTitle: string;
   activeView: string;
+  dateMode?: "day" | "month";
   showDueTodayToggle?: boolean;
   isDueTodayActive?: boolean;
   onToggleDueToday?: () => void;
@@ -49,6 +50,7 @@ interface DateGroupProps {
   doneStatus: string;
   defaultStatus: string;
   selectedStoryId: string | null;
+  dateMode?: "day" | "month";
   onSelectStory: (storyId: string) => void;
   onUpdateStory: (story: Story) => void;
   onDeleteStory: (storyId: string) => void;
@@ -63,6 +65,7 @@ function StatusGroup({
   doneStatus,
   defaultStatus,
   selectedStoryId, 
+  dateMode,
   onSelectStory, 
   onUpdateStory,
   onDeleteStory,
@@ -116,6 +119,7 @@ function StatusGroup({
               story={story}
               epic={epics.find((e) => e.id === story.epicId)}
               isSelected={selectedStoryId === story.id}
+              dateMode={dateMode}
               onClick={() => onSelectStory(story.id)}
               onToggleComplete={() => {
                 onUpdateStory({
@@ -155,6 +159,7 @@ export function StoryList({
   onEmptyTrash,
   viewTitle,
   activeView,
+  dateMode = "day",
   showDueTodayToggle,
   isDueTodayActive,
   onToggleDueToday,
@@ -258,6 +263,7 @@ export function StoryList({
                   story={story}
                   epic={epics.find((e) => e.id === story.epicId)}
                   isSelected={selectedStoryId === story.id}
+                  dateMode={dateMode}
                   onClick={() => onSelectStory(story.id)}
                   onToggleComplete={() => {
                     onUpdateStory({
@@ -382,6 +388,7 @@ export function StoryList({
               doneStatus={doneStatus}
               defaultStatus={defaultStatus}
               selectedStoryId={selectedStoryId}
+              dateMode={dateMode}
               onSelectStory={onSelectStory}
               onUpdateStory={onUpdateStory}
               onDeleteStory={onDeleteStory}

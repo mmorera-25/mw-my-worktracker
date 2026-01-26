@@ -19,6 +19,7 @@ export interface Story {
   status: string;
   priority: 'low' | 'medium' | 'high';
   createdAt: Date;
+  isYearly?: boolean;
   isDeleted?: boolean;
   deletedAt?: Date;
   completedAt?: Date;

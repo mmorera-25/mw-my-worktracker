@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { format } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,8 @@ interface CreateStoryDialogProps {
   defaultStatus: string;
   onRequestCreateEpic: () => void;
   onCreateStory: (story: Omit<Story, "id" | "key" | "createdAt">) => void;
+  dateMode?: "day" | "month";
+  isYearly?: boolean;
 }
 
 export function CreateStoryDialog({
@@ -42,12 +45,15 @@ export function CreateStoryDialog({
   defaultStatus,
   onRequestCreateEpic,
   onCreateStory,
+  dateMode = "day",
+  isYearly = false,
 }: CreateStoryDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [epicId, setEpicId] = useState(selectedEpicId || "");
   const [priority, setPriority] = useState<Story["priority"]>("low");
   const [status, setStatus] = useState(defaultStatus);
+  const [dueMonth, setDueMonth] = useState(format(new Date(), "yyyy-MM"));
   const titleRef = useRef<HTMLInputElement | null>(null);
   const availableEpics = epics.filter((epic) => !epic.isArchived);
   const defaultEpicId =
@@ -61,6 +67,7 @@ export function CreateStoryDialog({
       setEpicId(defaultEpicId);
       setTitle(initialTitle || "");
       setStatus(defaultStatus);
+      setDueMonth(format(new Date(), "yyyy-MM"));
       requestAnimationFrame(() => titleRef.current?.focus());
     }
   }, [open, defaultEpicId, initialTitle, defaultStatus]);
@@ -68,14 +75,21 @@ export function CreateStoryDialog({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !epicId || !hasEpics) return;
+    if (dateMode === "month" && !dueMonth) return;
+
+    const dueDates =
+      dateMode === "month"
+        ? [new Date(`${dueMonth}-01T00:00:00`)]
+        : [new Date()];
 
     onCreateStory({
       title: title.trim(),
       description: description.trim(),
       epicId,
-      dueDates: [new Date()],
+      dueDates,
       status,
       priority,
+      isYearly,
     });
 
     setTitle("");
@@ -173,6 +187,19 @@ export function CreateStoryDialog({
               rows={3}
             />
           </div>
+
+          {dateMode === "month" && (
+            <div className="space-y-2">
+              <Label htmlFor="due-month">Due month</Label>
+              <Input
+                id="due-month"
+                type="month"
+                value={dueMonth}
+                onChange={(e) => setDueMonth(e.target.value)}
+                required
+              />
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

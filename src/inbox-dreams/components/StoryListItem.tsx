@@ -3,13 +3,14 @@ import { cn } from "@inbox/lib/utils";
 import { Checkbox } from "@inbox/components/ui/checkbox";
 import { Button } from "@inbox/components/ui/button";
 import { Trash2, RotateCcw, Flag } from "lucide-react";
-import { format, isToday, isPast } from "date-fns";
+import { format, isPast, isSameMonth, isToday, startOfMonth } from "date-fns";
 
 interface StoryListItemProps {
   story: Story;
   epic?: Epic;
   isSelected: boolean;
   doneStatus: string;
+  dateMode?: "day" | "month";
   onClick: () => void;
   onToggleComplete: () => void;
   onPriorityChange?: (priority: Story["priority"]) => void;
@@ -34,6 +35,7 @@ export function StoryListItem({
   epic,
   isSelected,
   doneStatus,
+  dateMode = "day",
   onClick,
   onToggleComplete,
   onPriorityChange,
@@ -48,10 +50,14 @@ export function StoryListItem({
   const completedDate = story.completedAt;
   const isCompleted = story.status === doneStatus;
   const displayDate = isCompleted && completedDate ? completedDate : effectiveDueDate;
-  const isDueToday = isToday(displayDate);
+  const isMonthly = dateMode === "month" || Boolean(story.isYearly);
+  const isDueToday = isMonthly ? isSameMonth(displayDate, new Date()) : isToday(displayDate);
   const isOverdue =
-    !isCompleted && isPast(displayDate) && !isDueToday;
+    !isCompleted &&
+    !isDueToday &&
+    (isMonthly ? displayDate < startOfMonth(new Date()) : isPast(displayDate));
   const isDoneDisplay = isCompleted && completedDate;
+  const quarterLabel = `Q${Math.floor(displayDate.getMonth() / 3) + 1}`;
 
   return (
     <div
@@ -173,10 +179,10 @@ export function StoryListItem({
                       : "text-blue-600"
                   )}
                 >
-                  {format(displayDate, "d")}
+                  {isMonthly ? quarterLabel : format(displayDate, "d")}
                 </span>
                 <span className="text-[10px] font-semibold">
-                  {format(displayDate, "EEE").toUpperCase()}
+                  {isMonthly ? format(displayDate, "MMM") : format(displayDate, "EEE").toUpperCase()}
                 </span>
               </span>
             </div>

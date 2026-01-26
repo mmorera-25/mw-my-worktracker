@@ -90,6 +90,7 @@ const deserializeStory = (raw: Partial<Story>): Story => ({
   priority: (raw.priority as Story["priority"]) || "medium",
   createdAt: toDate(raw.createdAt),
   discussed: Boolean(raw.discussed),
+  isYearly: Boolean(raw.isYearly),
   isDeleted: Boolean(raw.isDeleted),
   deletedAt: raw.deletedAt ? toDate(raw.deletedAt) : undefined,
   completedAt: raw.completedAt ? toDate(raw.completedAt) : undefined,

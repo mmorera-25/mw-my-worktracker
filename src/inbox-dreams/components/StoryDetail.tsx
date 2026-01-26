@@ -38,6 +38,7 @@ interface StoryDetailProps {
   onUpdateStory: (story: Story) => void;
   onOpenMeetings?: () => void;
   onDeleteStory?: (storyId: string) => void;
+  dateMode?: "day" | "month";
 }
 
 const getDueDates = (story: Story) => {
@@ -85,6 +86,7 @@ export function StoryDetail({
   onUpdateStory,
   onOpenMeetings,
   onDeleteStory,
+  dateMode = "day",
 }: StoryDetailProps) {
   const [title, setTitle] = useState(story.title);
   const [description, setDescription] = useState(story.description);
@@ -121,17 +123,21 @@ export function StoryDetail({
   };
 
   const isCompleted = story.status === doneStatus;
+  const isYearly = dateMode === "month" || Boolean(story.isYearly);
   const effectiveDueDate = getEffectiveDueDate(story);
   const dueDates = getDueDates(story);
   const isOverdue = effectiveDueDate < new Date() && !isCompleted;
   const dueDays = differenceInCalendarDays(effectiveDueDate, new Date());
-  const dueLabel = isSameDay(effectiveDueDate, new Date())
+  const dueLabel = isYearly
+    ? format(effectiveDueDate, "MMMM yyyy")
+    : isSameDay(effectiveDueDate, new Date())
     ? "Today"
     : dueDays > 0
     ? `${dueDays} day${dueDays === 1 ? "" : "s"} left`
     : dueDays < 0
     ? `${Math.abs(dueDays)} day${Math.abs(dueDays) === 1 ? "" : "s"} overdue`
     : "Today";
+  const quarterLabel = `Q${Math.floor(effectiveDueDate.getMonth() / 3) + 1}`;
   const comments = story.comments ?? [];
   const completedDateValue = story.completedAt
     ? format(story.completedAt, "yyyy-MM-dd")
@@ -334,7 +340,7 @@ export function StoryDetail({
                 isOverdue ? "text-destructive" : "text-primary"
               )}
             >
-              {format(effectiveDueDate, "d MMM")}
+              {isYearly ? `${quarterLabel} • ${format(effectiveDueDate, "MMM")}` : format(effectiveDueDate, "d MMM")}
             </span>
             <span
               className={cn(
@@ -406,18 +412,26 @@ export function StoryDetail({
             </Select>
           </div>
           <div className="space-y-1">
-            <p className="text-[11px] uppercase text-muted-foreground">Due dates</p>
+            <p className="text-[11px] uppercase text-muted-foreground">
+              {isYearly ? "Due months" : "Due dates"}
+            </p>
             <div className="space-y-2">
               {dueDates.map((date, index) => (
                 <div key={`${date.getTime()}-${index}`} className="flex items-center gap-2">
                   <Input
-                    type="date"
-                    value={format(new Date(date), "yyyy-MM-dd")}
+                    type={isYearly ? "month" : "date"}
+                    value={format(
+                      new Date(date),
+                      isYearly ? "yyyy-MM" : "yyyy-MM-dd"
+                    )}
                     onChange={(e) => {
                       const value = e.target.value;
                       if (!value) return;
+                      const nextDate = isYearly
+                        ? new Date(`${value}-01T00:00:00`)
+                        : new Date(`${value}T00:00:00`);
                       const next = dueDates.map((entry, idx) =>
-                        idx === index ? new Date(`${value}T00:00:00`) : entry
+                        idx === index ? nextDate : entry
                       );
                       onUpdateStory({ ...story, dueDates: next });
                     }}
@@ -446,11 +460,14 @@ export function StoryDetail({
                 size="sm"
                 className="w-fit px-2 text-xs"
                 onClick={() => {
-                  const next = [...dueDates, new Date()];
+                  const nextDate = isYearly
+                    ? new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+                    : new Date();
+                  const next = [...dueDates, nextDate];
                   onUpdateStory({ ...story, dueDates: next });
                 }}
               >
-                <Plus className="h-3 w-3" /> Add date
+                <Plus className="h-3 w-3" /> {isYearly ? "Add month" : "Add date"}
               </Button>
             </div>
           </div>

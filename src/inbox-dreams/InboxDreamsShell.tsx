@@ -200,6 +200,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         "todo",
         "today",
         "week",
+        "yearly",
         "inbox",
         "search",
         "grid",
@@ -252,6 +253,15 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     return didNormalize ? next : stories;
   }, [stories, getStoryEpicBucketId]);
 
+  const yearlyStories = useMemo(
+    () => normalizedStories.filter((story) => story.isYearly),
+    [normalizedStories]
+  );
+  const regularStories = useMemo(
+    () => normalizedStories.filter((story) => !story.isYearly),
+    [normalizedStories]
+  );
+
   const selectedStory = normalizedStories.find((s) => s.id === selectedStoryId);
   const epicsPaneTotalWidth = useMemo(() => {
     if (isEpicsPaneCollapsed) return EPICS_BAR_WIDTH;
@@ -270,12 +280,17 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   }, [detailContainerWidth, epicsPaneTotalWidth, listPaneWidth]);
 
   const filteredStories = useMemo(() => {
-    let result = normalizedStories;
+    let result =
+      activeView === "yearly"
+        ? yearlyStories
+        : activeView === "trash"
+        ? normalizedStories
+        : regularStories;
 
     if (activeView === "trash") {
-      result = normalizedStories.filter((s) => s.isDeleted);
+      result = result.filter((s) => s.isDeleted);
     } else {
-      result = normalizedStories.filter((s) => !s.isDeleted);
+      result = result.filter((s) => !s.isDeleted);
     }
 
     if (selectedEpicId && !["completed", "trash"].includes(activeView)) {
@@ -327,17 +342,20 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     showDueTodayOnly,
     showDueThisWeekOnly,
     searchQuery,
+    yearlyStories,
+    regularStories,
   ]);
 
   const storyCounts = useMemo(() => {
+    const source = activeView === "yearly" ? yearlyStories : regularStories;
     const counts: Record<string, number> = {};
-    normalizedStories
+    source
       .filter((s) => !s.isDeleted)
       .forEach((story) => {
         counts[story.epicId] = (counts[story.epicId] || 0) + 1;
       });
     return counts;
-  }, [normalizedStories]);
+  }, [activeView, regularStories, yearlyStories]);
 
 
   const activeEpics = useMemo(() => epics.filter((epic) => !epic.isArchived), [epics]);
@@ -357,7 +375,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     (epicId: string | null) => {
       setSelectedEpicId(epicId);
       if (epicId) {
-        if (activeView !== "search") {
+        if (activeView !== "search" && activeView !== "yearly") {
           setActiveView("week");
         }
         setSelectedStoryId(null);
@@ -374,7 +392,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         setSelectedEpicId(null);
         setSelectedStoryId(null);
       }
-      if (view === "week") {
+      if (view === "week" || view === "yearly") {
         setSelectedEpicId(null);
         setSelectedStoryId(null);
       }
@@ -516,6 +534,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         createdAt: new Date(),
         dueDates:
           normalizedDueDates.length > 0 ? normalizedDueDates : [new Date()],
+        isYearly: Boolean(storyData.isYearly),
       };
       setStories((prev) => [...prev, newStory]);
       setSelectedStoryId(newStory.id);
@@ -624,10 +643,12 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     if (activeView === "search") return "Search";
     if (activeView === "settings") return "Settings";
     if (activeView === "epics") return "Epics";
+    if (activeView === "yearly") return "Yearly";
     return "Inbox";
   };
 
   const isCalendarView = activeView === "today";
+  const dateMode = activeView === "yearly" ? "month" : "day";
   const sidebarActiveView = useMemo(() => {
     if (["epics", "trash"].includes(activeView)) return "week";
     return activeView;
@@ -762,10 +783,10 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       current = addDays(current, 1);
     }
     return days;
-  }, []);
+  }, [calendarMonth]);
 
   const storiesByDay = useMemo(() => {
-    return stories.reduce<Record<string, Story[]>>((acc, story) => {
+    return regularStories.reduce<Record<string, Story[]>>((acc, story) => {
       if (story.isDeleted) return acc;
       if (story.status === doneStatus) return acc;
       const dates = getAllDueDates(story);
@@ -779,10 +800,10 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       });
       return acc;
     }, {});
-  }, [stories, doneStatus]);
+  }, [regularStories, doneStatus]);
 
   const completedStoriesByDay = useMemo(() => {
-    return stories.reduce<Record<string, Story[]>>((acc, story) => {
+    return regularStories.reduce<Record<string, Story[]>>((acc, story) => {
       if (story.isDeleted) return acc;
       if (!story.completedAt) return acc;
       const key = format(story.completedAt, "yyyy-MM-dd");
@@ -790,11 +811,11 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       acc[key].push(story);
       return acc;
     }, {});
-  }, [stories]);
+  }, [regularStories]);
 
   const todayDueTasks = useMemo(() => {
     const today = new Date();
-    return stories
+    return regularStories
       .filter(
         (story) =>
           !story.isDeleted &&
@@ -805,17 +826,17 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         (a, b) =>
           getEffectiveDueDate(a).getTime() - getEffectiveDueDate(b).getTime()
       );
-  }, [stories, doneStatus]);
+  }, [regularStories, doneStatus]);
 
   const upcomingNotifications = useMemo(() => {
-    return stories
+    return regularStories
       .filter((story) => !story.isDeleted && story.status !== doneStatus)
       .sort(
         (a, b) =>
           getEffectiveDueDate(a).getTime() - getEffectiveDueDate(b).getTime()
       )
       .slice(0, 5);
-  }, [stories, doneStatus]);
+  }, [regularStories, doneStatus]);
 
   const handleRefresh = useCallback(() => {
     const refresh = async () => {
@@ -1400,6 +1421,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 onEmptyTrash={handleEmptyTrash}
                 viewTitle={getViewTitle()}
                 activeView={activeView}
+                dateMode={dateMode}
                 showDueTodayToggle={activeView === "week"}
                 isDueTodayActive={showDueTodayOnly}
                 onToggleDueToday={() => {
@@ -1453,6 +1475,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                   statusOptions={workflow.columns}
                   doneStatus={doneStatus}
                   defaultStatus={defaultStatus}
+                  dateMode={dateMode}
                   onUpdateStory={handleUpdateStory}
                   onOpenMeetings={() => setActiveView("oneonone")}
                   onDeleteStory={handleDeleteStory}
@@ -1545,6 +1568,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         initialTitle={pendingStoryTitle}
         statusOptions={workflow.columns}
         defaultStatus={defaultStatus}
+        dateMode={dateMode}
+        isYearly={activeView === "yearly"}
         onRequestCreateEpic={() => {
           setIsCreateStoryOpen(false);
           setIsCreateEpicOpen(true);
