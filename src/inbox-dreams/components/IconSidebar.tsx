@@ -1,7 +1,7 @@
 import {
   Calendar,
-  CalendarRange,
   Inbox,
+  ListTodo,
   Search,
   RefreshCw,
   HelpCircle,
@@ -34,8 +34,8 @@ interface IconSidebarProps {
 }
 
 const topIcons = [
-  { id: "week", icon: Inbox, label: "Inbox" },
-  { id: "yearly", icon: CalendarRange, label: "Yearly Inbox" },
+  { id: "week", icon: Inbox, label: "Inbox", iconTint: "text-primary" },
+  { id: "yearly", icon: ListTodo, label: "Yearly Inbox", iconTint: "text-accent" },
   { id: "today", icon: Calendar, label: "Calendar" },
   { id: "search", icon: Search, label: "Search" },
 ];
@@ -155,7 +155,15 @@ export function IconSidebar({ activeView, onViewChange, onRefresh, user }: IconS
           isExpanded ? "px-1 items-stretch" : "items-center"
         )}
       >
-        {topIcons.map((item) => (
+        {topIcons.map((item) => {
+          const isActive = activeView === item.id;
+          const iconClassName = cn(
+            "w-5 h-5",
+            isActive
+              ? "text-primary-foreground"
+              : item.iconTint ?? "text-muted-foreground"
+          );
+          return (
           <div
             key={item.id}
             className={cn(isExpanded ? "w-full" : "w-auto")}
@@ -164,18 +172,18 @@ export function IconSidebar({ activeView, onViewChange, onRefresh, user }: IconS
               onClick={() => onViewChange(item.id)}
             className={cn(
               buttonBaseClasses,
-              activeView === item.id
+              isActive
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "hover:bg-hover-overlay text-muted-foreground"
             )}
               title={item.label}
             >
-              <item.icon className="w-5 h-5" />
+              <item.icon className={iconClassName} />
             {isExpanded && (
               <span
                 className={cn(
                   "text-sm font-medium",
-                  activeView === item.id ? "text-primary-foreground" : "text-foreground"
+                  isActive ? "text-primary-foreground" : "text-foreground"
                 )}
               >
                 {item.label}
@@ -183,7 +191,7 @@ export function IconSidebar({ activeView, onViewChange, onRefresh, user }: IconS
             )}
             </button>
           </div>
-        ))}
+        )})}
 
         <div className="w-8 h-px bg-border my-2" />
 

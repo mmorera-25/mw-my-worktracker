@@ -14,6 +14,7 @@ export interface Story {
   description: string;
   epicId: string;
   discussed?: boolean;
+  startDate?: Date;
   dueDates: Date[];
   typeOfWork?: string;
   assignee?: User;

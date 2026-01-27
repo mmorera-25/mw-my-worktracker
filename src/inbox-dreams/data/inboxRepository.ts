@@ -60,6 +60,7 @@ const deserializeEpic = (raw: Partial<Epic>): Epic => ({
 
 const serializeStory = (story: Story) => ({
   ...story,
+  startDate: story.startDate ? story.startDate.toISOString() : undefined,
   dueDates: story.dueDates.map((date) => date.toISOString()),
   createdAt: story.createdAt.toISOString(),
   deletedAt: story.deletedAt ? story.deletedAt.toISOString() : undefined,
@@ -77,42 +78,46 @@ const serializeStory = (story: Story) => ({
   })),
 });
 
-const deserializeStory = (raw: Partial<Story>): Story => ({
-  id: raw.id || "",
-  key: raw.key || "",
-  title: raw.title || "Untitled story",
-  description: raw.description || "",
-  epicId: raw.epicId || "",
-  typeOfWork: raw.typeOfWork || "",
-  dueDates: Array.isArray(raw.dueDates) && raw.dueDates.length > 0
-    ? raw.dueDates.map((date) => toDate(date))
-    : [toDate(raw.createdAt)],
-  assignee: raw.assignee,
-  status: raw.status || "New",
-  priority: (raw.priority as Story["priority"]) || "medium",
-  createdAt: toDate(raw.createdAt),
-  discussed: Boolean(raw.discussed),
-  isYearly: Boolean(raw.isYearly),
-  isDeleted: Boolean(raw.isDeleted),
-  deletedAt: raw.deletedAt ? toDate(raw.deletedAt) : undefined,
-  completedAt: raw.completedAt ? toDate(raw.completedAt) : undefined,
-  comments: Array.isArray(raw.comments)
+const deserializeStory = (raw: Partial<Story>): Story => {
+  const rawDueDates = Array.isArray(raw.dueDates) ? raw.dueDates : null;
+  return {
+    id: raw.id || "",
+    key: raw.key || "",
+    title: raw.title || "Untitled story",
+    description: raw.description || "",
+    epicId: raw.epicId || "",
+    typeOfWork: raw.typeOfWork || "",
+    startDate: raw.startDate ? toDate(raw.startDate) : undefined,
+    dueDates: rawDueDates
+      ? rawDueDates.map((date) => toDate(date))
+      : [toDate(raw.createdAt)],
+    assignee: raw.assignee,
+    status: raw.status || "New",
+    priority: (raw.priority as Story["priority"]) || "medium",
+    createdAt: toDate(raw.createdAt),
+    discussed: Boolean(raw.discussed),
+    isYearly: Boolean(raw.isYearly),
+    isDeleted: Boolean(raw.isDeleted),
+    deletedAt: raw.deletedAt ? toDate(raw.deletedAt) : undefined,
+    completedAt: raw.completedAt ? toDate(raw.completedAt) : undefined,
+    comments: Array.isArray(raw.comments)
       ? raw.comments.map((comment: Partial<StoryComment>) => ({
-        id: comment.id || "",
-        text: comment.text || "",
-        createdAt: toDate(comment.createdAt),
-        meetingDate: typeof comment.meetingDate === "number" ? comment.meetingDate : undefined,
-        isCompleted: Boolean(comment.isCompleted),
-      }))
-    : [],
-  attachments: Array.isArray((raw as Story).attachments)
-    ? (raw as Story).attachments!.map((file) => ({
-        id: file.id || crypto.randomUUID(),
-        name: file.name || "file",
-        path: file.path || "",
-      }))
-    : [],
-});
+          id: comment.id || "",
+          text: comment.text || "",
+          createdAt: toDate(comment.createdAt),
+          meetingDate: typeof comment.meetingDate === "number" ? comment.meetingDate : undefined,
+          isCompleted: Boolean(comment.isCompleted),
+        }))
+      : [],
+    attachments: Array.isArray((raw as Story).attachments)
+      ? (raw as Story).attachments!.map((file) => ({
+          id: file.id || crypto.randomUUID(),
+          name: file.name || "file",
+          path: file.path || "",
+        }))
+      : [],
+  };
+};
 
 export const loadInboxState = (db: Database): InboxState => {
   const stored = getJson(db, "inbox_state");

@@ -25,7 +25,8 @@ interface StoryListItemProps {
 }
 
 const getEffectiveDueDate = (story: Story) => {
-  const dates = story.dueDates && story.dueDates.length > 0 ? story.dueDates : [story.createdAt];
+  const dates = story.dueDates && story.dueDates.length > 0 ? story.dueDates : [];
+  if (dates.length === 0) return null;
   const sorted = dates.slice().sort((a, b) => a.getTime() - b.getTime());
   const now = new Date();
   const upcoming = sorted.find((date) => date >= now);
@@ -53,25 +54,119 @@ export function StoryListItem({
   const effectiveDueDate = getEffectiveDueDate(story);
   const completedDate = story.completedAt;
   const isCompleted = story.status === doneStatus;
-  const displayDate = isCompleted && completedDate ? completedDate : effectiveDueDate;
+  const displayDate =
+    isCompleted && completedDate
+      ? completedDate
+      : effectiveDueDate ?? story.startDate ?? story.createdAt;
   const isMonthly = dateMode === "month" || Boolean(story.isYearly);
   const isOnHold = story.status === "On Hold / Waiting";
-  const isDueToday = isMonthly ? isSameMonth(displayDate, new Date()) : isToday(displayDate);
+  const isDueToday = displayDate
+    ? isMonthly
+      ? isSameMonth(displayDate, new Date())
+      : isToday(displayDate)
+    : false;
   const isOverdue =
     !isCompleted &&
+    Boolean(displayDate) &&
     !isDueToday &&
-    (isMonthly ? displayDate < startOfMonth(new Date()) : isPast(displayDate));
+    (isMonthly
+      ? displayDate! < startOfMonth(new Date())
+      : isPast(displayDate!));
   const isDoneDisplay = isCompleted && completedDate;
-  const dueDays = differenceInCalendarDays(effectiveDueDate, new Date());
-  const dueText =
-    dueDays === 0
-      ? "Due today"
-      : dueDays > 0
-      ? `Due in ${dueDays} day${dueDays === 1 ? "" : "s"}`
-      : `Due ${Math.abs(dueDays)} day${Math.abs(dueDays) === 1 ? "" : "s"} ago`;
-  const dueWithType = story.typeOfWork
-    ? `${dueText} | ${story.typeOfWork}`
-    : dueText;
+  const now = new Date();
+  const dueDays = effectiveDueDate
+    ? differenceInCalendarDays(effectiveDueDate, now)
+    : null;
+  const startDate = story.startDate ? new Date(story.startDate) : null;
+  const daysUntilStart = startDate ? differenceInCalendarDays(startDate, now) : null;
+  const dueValueClass =
+    (dueDays ?? 0) <= 0
+      ? "text-destructive"
+      : (dueDays ?? 0) <= 3
+      ? "text-orange-700"
+      : "text-emerald-600";
+  const startValueClass =
+    (daysUntilStart ?? 0) <= 0
+      ? "text-destructive"
+      : (daysUntilStart ?? 0) <= 3
+      ? "text-orange-700"
+      : "text-emerald-600";
+  const dueLine = (() => {
+    if (startDate && !effectiveDueDate) {
+      if (daysUntilStart !== null && daysUntilStart > 0) {
+        return (
+          <>
+            Start in{" "}
+            <span className={cn("text-[12px] font-semibold", startValueClass)}>
+              {daysUntilStart}
+            </span>{" "}
+            day{daysUntilStart === 1 ? "" : "s"}
+          </>
+        );
+      }
+      if (daysUntilStart === 0) {
+        return (
+          <>Start today</>
+        );
+      }
+      if (daysUntilStart !== null && daysUntilStart < 0) {
+        const daysSinceStart = Math.abs(daysUntilStart);
+        return (
+          <>
+            Started {daysSinceStart} day{daysSinceStart === 1 ? "" : "s"} ago
+          </>
+        );
+      }
+    }
+    if (startDate && effectiveDueDate && daysUntilStart !== null) {
+      if (daysUntilStart > 0) {
+        return (
+          <>
+            Start in{"\u00A0"}
+            <span className="font-bold">{daysUntilStart}</span>
+            {"\u00A0"}day{daysUntilStart === 1 ? "" : "s"}
+          </>
+        );
+      }
+      if (daysUntilStart === 0) {
+        return <>Start today</>;
+      }
+    }
+    if (dueDays === null) {
+      return <>No due date</>;
+    }
+    if (dueDays > 0) {
+      return (
+        <>
+          Due in{"\u00A0"}
+          <span className="font-bold">{dueDays}</span>
+          {"\u00A0"}
+          day{dueDays === 1 ? "" : "s"}
+        </>
+      );
+    }
+    if (dueDays === 0) {
+      return <>Due today</>;
+    }
+    const overdueDays = Math.abs(dueDays);
+    return (
+      <>
+        Due {overdueDays} day{overdueDays === 1 ? "" : "s"} ago
+      </>
+    );
+  })();
+  const duePillTextClass =
+    dueDays === null
+      ? "text-muted-foreground"
+      : dueDays === 0
+      ? "text-yellow-700 font-semibold"
+      : dueDays < 0
+      ? "text-destructive"
+      : "text-muted-foreground";
+  const pillBaseClass =
+    "inline-flex items-center rounded-full border border-panel-border bg-muted px-2 py-0.5 text-[10px] leading-none font-medium";
+  const duePillBackgroundClass =
+    dueDays === 0 ? "border-yellow-500/60 bg-yellow-500/15" : "";
   const quarterLabel = `Q${Math.floor(displayDate.getMonth() / 3) + 1}`;
 
   return (
@@ -126,104 +221,130 @@ export function StoryListItem({
                   {story.title}
                 </h3>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-1">{dueWithType}</p>
+              <div className="mt-1 flex flex-nowrap items-center gap-1.5">
+                <span
+                  className={cn(
+                    pillBaseClass,
+                    duePillTextClass,
+                    duePillBackgroundClass
+                  )}
+                >
+                  {dueLine}
+                </span>
+                {story.typeOfWork ? (
+                  <span
+                    className={cn(
+                      pillBaseClass,
+                      "text-muted-foreground"
+                    )}
+                  >
+                    {story.typeOfWork}
+                  </span>
+                ) : null}
+              </div>
             </div>
-            <div className="-ml-1 flex flex-col items-center justify-center">
-              <button
-                type="button"
-                className={cn(
-                  "relative flex h-14 w-12 flex-col items-center justify-center gap-0.5 rounded-md border text-[10px] font-semibold leading-tight transition-colors",
-                  isOnHold
-                    ? "border-border bg-transparent text-muted-foreground"
-                    : isDoneDisplay
-                    ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-700"
-                    : isDueToday
-                    ? "border-yellow-500/60 bg-yellow-500/15 text-yellow-700 due-today-pulse"
-                    : isOverdue
-                    ? "border-destructive/50 bg-destructive/10 text-destructive"
-                    : "border-border bg-surface-2 text-muted-foreground",
-                  onDueDateChange ? "hover:bg-hover-overlay cursor-pointer" : "cursor-default"
-                )}
-                aria-label="Change due date"
-                title="Change due date"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (!onDueDateChange) return;
-                  const input = dueInputRef.current;
-                  if (!input) return;
-                  input.focus();
-                  if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === "function") {
-                    (input as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
-                  }
-                }}
-              >
-                <input
-                  ref={dueInputRef}
-                  type={isMonthly ? "month" : "date"}
-                  value={format(displayDate, isMonthly ? "yyyy-MM" : "yyyy-MM-dd")}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (!value) return;
-                    const nextDate = isMonthly
-                      ? new Date(`${value}-01T00:00:00`)
-                      : new Date(`${value}T00:00:00`);
-                    onDueDateChange?.(nextDate);
+            {effectiveDueDate ? (
+              <div className="-ml-1 flex flex-col items-center justify-center">
+                <button
+                  type="button"
+                  className={cn(
+                    "relative flex h-14 w-12 flex-col items-center justify-center gap-0.5 rounded-md border text-[10px] font-semibold leading-tight transition-colors",
+                    isOnHold
+                      ? "border-border bg-transparent text-muted-foreground"
+                      : isDoneDisplay
+                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-700"
+                      : isDueToday
+                      ? "border-yellow-500/60 bg-yellow-500/15 text-yellow-700 due-today-pulse"
+                      : isOverdue
+                      ? "border-destructive/50 bg-destructive/10 text-destructive"
+                      : "border-border bg-surface-2 text-muted-foreground",
+                    onDueDateChange ? "hover:bg-hover-overlay cursor-pointer" : "cursor-default"
+                  )}
+                  aria-label="Change due date"
+                  title="Change due date"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!onDueDateChange) return;
+                    const input = dueInputRef.current;
+                    if (!input) return;
+                    input.focus();
+                    if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === "function") {
+                      (input as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+                    }
                   }}
-                  className="due-date-input absolute inset-0 z-10 h-full w-full cursor-pointer"
-                  aria-hidden="true"
-                  disabled={!onDueDateChange}
-                />
-                {isMonthly ? (
-                  <>
-                    <span
-                      className={cn(
-                        "text-lg font-semibold leading-none pointer-events-none",
-                        isDoneDisplay
-                          ? "text-emerald-700"
-                          : "text-blue-600"
-                      )}
-                    >
-                      {quarterLabel}
-                    </span>
-                    <span className="text-[10px] font-semibold pointer-events-none">
-                      {format(displayDate, "MMM")}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span
-                      className={cn(
-                        "text-[10px] font-semibold pointer-events-none",
-                        isOnHold ? "text-muted-foreground" : ""
-                      )}
-                    >
-                      {format(displayDate, "EEE").toUpperCase()}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-lg font-semibold leading-none pointer-events-none",
-                        isDoneDisplay
-                          ? "text-emerald-700"
-                          : isOnHold
-                          ? "text-foreground"
-                          : "text-blue-600"
-                      )}
-                    >
-                      {format(displayDate, "d")}
-                    </span>
-                    <span
-                      className={cn(
-                        "text-[10px] font-bold pointer-events-none",
-                        isOnHold ? "text-muted-foreground" : ""
-                      )}
-                    >
-                      {format(displayDate, "MMM").toUpperCase()}
-                    </span>
-                  </>
-                )}
-              </button>
-            </div>
+                >
+                  <input
+                    ref={dueInputRef}
+                    type={isMonthly ? "month" : "date"}
+                    value={
+                      effectiveDueDate
+                        ? format(effectiveDueDate, isMonthly ? "yyyy-MM" : "yyyy-MM-dd")
+                        : ""
+                    }
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (!value) return;
+                      const nextDate = isMonthly
+                        ? new Date(`${value}-01T00:00:00`)
+                        : new Date(`${value}T00:00:00`);
+                      onDueDateChange?.(nextDate);
+                    }}
+                    className="due-date-input absolute inset-0 z-10 h-full w-full cursor-pointer"
+                    aria-hidden="true"
+                    disabled={!onDueDateChange}
+                  />
+                  {isMonthly ? (
+                    <>
+                      <span
+                        className={cn(
+                          "text-lg font-semibold leading-none pointer-events-none",
+                          isDoneDisplay
+                            ? "text-emerald-700"
+                            : "text-blue-600"
+                        )}
+                      >
+                        {quarterLabel}
+                      </span>
+                      <span className="text-[10px] font-semibold pointer-events-none">
+                        {format(displayDate, "MMM")}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span
+                        className={cn(
+                          "text-[10px] font-semibold pointer-events-none",
+                          isOnHold ? "text-muted-foreground" : ""
+                        )}
+                      >
+                        {format(displayDate, "EEE").toUpperCase()}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-lg font-semibold leading-none pointer-events-none",
+                          isDoneDisplay
+                            ? "text-emerald-700"
+                            : isOnHold
+                            ? "text-foreground"
+                            : "text-blue-600"
+                        )}
+                      >
+                        {format(displayDate, "d")}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-[10px] font-bold pointer-events-none",
+                          isOnHold ? "text-muted-foreground" : ""
+                        )}
+                      >
+                        {format(displayDate, "MMM").toUpperCase()}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
+            ) : null}
             {(onPriorityChange || onDelete) && (
               <div className="flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                 {onPriorityChange && (

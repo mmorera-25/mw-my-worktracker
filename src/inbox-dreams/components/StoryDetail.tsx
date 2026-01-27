@@ -45,13 +45,12 @@ interface StoryDetailProps {
 }
 
 const getDueDates = (story: Story) => {
-  return story.dueDates && story.dueDates.length > 0
-    ? story.dueDates
-    : [story.createdAt];
+  return story.dueDates ?? [];
 };
 
 const getEffectiveDueDate = (story: Story) => {
   const dates = getDueDates(story);
+  if (!dates.length) return null;
   const sorted = dates.slice().sort((a, b) => a.getTime() - b.getTime());
   const now = new Date();
   const upcoming = sorted.find((date) => date >= now);
@@ -160,21 +159,19 @@ export function StoryDetail({
   const isYearly = dateMode === "month" || Boolean(story.isYearly);
   const effectiveDueDate = getEffectiveDueDate(story);
   const dueDates = getDueDates(story);
-  const isOverdue = effectiveDueDate < new Date() && !isCompleted;
-  const dueDays = differenceInCalendarDays(effectiveDueDate, new Date());
-  const dueLabel = isYearly
-    ? format(effectiveDueDate, "MMMM yyyy")
-    : isSameDay(effectiveDueDate, new Date())
-    ? "Today"
-    : dueDays > 0
-    ? `${dueDays} day${dueDays === 1 ? "" : "s"} left`
-    : dueDays < 0
-    ? `${Math.abs(dueDays)} day${Math.abs(dueDays) === 1 ? "" : "s"} overdue`
-    : "Today";
-  const quarterLabel = `Q${Math.floor(effectiveDueDate.getMonth() / 3) + 1}`;
+  const isOverdue = Boolean(effectiveDueDate) && effectiveDueDate < new Date() && !isCompleted;
+  const dueDays = effectiveDueDate
+    ? differenceInCalendarDays(effectiveDueDate, new Date())
+    : null;
+  const quarterLabel = effectiveDueDate
+    ? `Q${Math.floor(effectiveDueDate.getMonth() / 3) + 1}`
+    : "";
   const comments = story.comments ?? [];
   const completedDateValue = story.completedAt
     ? format(story.completedAt, "yyyy-MM-dd")
+    : "";
+  const startDateValue = story.startDate
+    ? format(story.startDate, "yyyy-MM-dd")
     : "";
 
   const renderRichText = (value?: string) => {
@@ -374,145 +371,175 @@ export function StoryDetail({
                 isOverdue ? "text-destructive" : "text-primary"
               )}
             >
-              {isYearly ? `${quarterLabel} • ${format(effectiveDueDate, "MMM")}` : format(effectiveDueDate, "d MMM")}
-            </span>
-            <span
-              className={cn(
-                "text-xs font-semibold",
-                dueDays < 0 ? "text-destructive" : "text-muted-foreground"
-              )}
-            >
-              {dueLabel}
+              {effectiveDueDate
+                ? isYearly
+                  ? `${quarterLabel} • ${format(effectiveDueDate, "MMM")}`
+                  : format(effectiveDueDate, "d MMM")
+                : "No due date"}
             </span>
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto scrollbar-thin p-4">
-        <div className="mb-4 flex flex-wrap items-end gap-4">
-          <div className="space-y-1">
-            <p className="text-[11px] uppercase text-muted-foreground">Status</p>
-            <Select
-              value={story.status}
-              onValueChange={(value) => onUpdateStory({ ...story, status: value })}
-            >
-              <SelectTrigger className="h-7 w-36 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {orderedStatusOptions.map((status) => (
-                  <SelectItem
-                    key={status}
-                    value={status}
-                    className={status === "New" ? "hidden" : undefined}
-                    disabled={status === "New"}
-                  >
-                    {status}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[11px] uppercase text-muted-foreground">Priority</p>
-            <Select
-              value={story.priority}
-              onValueChange={(value) =>
-                onUpdateStory({ ...story, priority: value as Story["priority"] })
-              }
-            >
-              <SelectTrigger className="h-7 w-28 text-xs">
-                <SelectValue placeholder="Priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[11px] uppercase text-muted-foreground">Epic</p>
-            <Select
-              value={story.epicId}
-              onValueChange={(value) => onUpdateStory({ ...story, epicId: value })}
-            >
-              <SelectTrigger className="h-7 w-36 text-xs">
-                <SelectValue placeholder="Epic" />
-              </SelectTrigger>
-              <SelectContent>
-                {sortedEpics.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[11px] uppercase text-muted-foreground">Type of work</p>
-            <Select
-              value={story.typeOfWork ?? ""}
-              onValueChange={(value) => {
-                if (value === "__other__") {
-                  setIsTypeModalOpen(true);
-                  return;
+      <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
+<aside className="relative z-10 w-full shrink-0 space-y-4 bg-slate-50 p-3 overflow-visible lg:w-64 lg:border-r lg:border-panel-border lg:shadow-[inset_-1px_0_0_rgba(0,0,0,0.06)]">
+            <div className="space-y-1">
+              <p className="text-[11px] uppercase text-muted-foreground">Status</p>
+              <Select
+                value={story.status}
+                onValueChange={(value) => onUpdateStory({ ...story, status: value })}
+              >
+                <SelectTrigger className="h-7 w-full text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {orderedStatusOptions.map((status) => (
+                    <SelectItem
+                      key={status}
+                      value={status}
+                      className={status === "New" ? "hidden" : undefined}
+                      disabled={status === "New"}
+                    >
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] uppercase text-muted-foreground">Priority</p>
+              <Select
+                value={story.priority}
+                onValueChange={(value) =>
+                  onUpdateStory({ ...story, priority: value as Story["priority"] })
                 }
-                onUpdateStory({ ...story, typeOfWork: value });
-              }}
-            >
-              <SelectTrigger className="h-7 w-40 text-xs">
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                {sortedTypeOfWorkOptions.map((option) => (
-                  <SelectItem key={option} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-                <SelectItem value="__other__">Other...</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[11px] uppercase text-muted-foreground">
-              {isYearly ? "Due months" : "Due dates"}
-            </p>
-            <div className="space-y-2">
-              {dueDates.map((date, index) => {
-                const parsedKey =
-                  date instanceof Date ? date : new Date(date as unknown as string);
-                const keyTime = isValid(parsedKey) ? parsedKey.getTime() : Date.now();
-                return (
-                <div key={`${keyTime}-${index}`} className="flex items-center gap-2">
-                  {(() => {
-                    const parsed =
-                      date instanceof Date ? date : new Date(date as unknown as string);
-                    const safeDate = isValid(parsed) ? parsed : new Date();
-                    return (
-                  <Input
-                    type={isYearly ? "month" : "date"}
-                    value={format(
-                      safeDate,
-                      isYearly ? "yyyy-MM" : "yyyy-MM-dd"
-                    )}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (!value) return;
-                      const nextDate = isYearly
-                        ? new Date(`${value}-01T00:00:00`)
-                        : new Date(`${value}T00:00:00`);
-                      const next = dueDates.map((entry, idx) =>
-                        idx === index ? nextDate : entry
-                      );
-                      onUpdateStory({ ...story, dueDates: next });
+              >
+                <SelectTrigger className="h-7 w-full text-xs">
+                  <SelectValue placeholder="Priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] uppercase text-muted-foreground">Epic</p>
+              <Select
+                value={story.epicId}
+                onValueChange={(value) => onUpdateStory({ ...story, epicId: value })}
+              >
+                <SelectTrigger className="h-7 w-full text-xs">
+                  <SelectValue placeholder="Epic" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortedEpics.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] uppercase text-muted-foreground">Type of work</p>
+              <Select
+                value={story.typeOfWork ?? ""}
+                onValueChange={(value) => {
+                  if (value === "__other__") {
+                    setIsTypeModalOpen(true);
+                    return;
+                  }
+                  onUpdateStory({ ...story, typeOfWork: value });
+                }}
+              >
+                <SelectTrigger className="h-7 w-full text-xs">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortedTypeOfWorkOptions.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="__other__">Other...</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] uppercase text-muted-foreground">Start date</p>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={startDateValue}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    onUpdateStory({
+                      ...story,
+                      startDate: value ? new Date(`${value}T00:00:00`) : undefined,
+                    });
+                  }}
+                  className="h-7 w-full text-xs"
+                />
+                {story.startDate ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => {
+                      onUpdateStory({ ...story, startDate: undefined });
                     }}
-                    className="h-7 w-36 text-xs"
-                  />
-                    );
-                  })()}
-                  {dueDates.length > 1 && (
+                    title="Clear start date"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[11px] uppercase text-muted-foreground">
+                {isYearly ? "Due months" : "Due dates"}
+              </p>
+              <div className="space-y-2">
+                {dueDates.map((date, index) => {
+                  const parsedKey =
+                    date instanceof Date ? date : new Date(date as unknown as string);
+                  const keyTime = isValid(parsedKey) ? parsedKey.getTime() : Date.now();
+                  return (
+                  <div key={`${keyTime}-${index}`} className="flex items-center gap-2">
+                    {(() => {
+                      const parsed =
+                        date instanceof Date ? date : new Date(date as unknown as string);
+                      const safeDate = isValid(parsed) ? parsed : new Date();
+                      return (
+                    <Input
+                      type={isYearly ? "month" : "date"}
+                      value={format(
+                        safeDate,
+                        isYearly ? "yyyy-MM" : "yyyy-MM-dd"
+                      )}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!value) {
+                          const next = dueDates.filter((_, idx) => idx !== index);
+                          onUpdateStory({ ...story, dueDates: next });
+                          return;
+                        }
+                        const nextDate = isYearly
+                          ? new Date(`${value}-01T00:00:00`)
+                          : new Date(`${value}T00:00:00`);
+                        const next = dueDates.map((entry, idx) =>
+                          idx === index ? nextDate : entry
+                        );
+                        onUpdateStory({ ...story, dueDates: next });
+                      }}
+                      className="h-7 w-full text-xs"
+                    />
+                      );
+                    })()}
                     <Button
                       type="button"
                       variant="ghost"
@@ -526,43 +553,71 @@ export function StoryDetail({
                     >
                       <X className="h-4 w-4" />
                     </Button>
-                  )}
-                </div>
-              )})}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="w-fit px-2 text-xs"
-                onClick={() => {
-                  const nextDate = isYearly
-                    ? new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-                    : new Date();
-                  const next = [...dueDates, nextDate];
-                  onUpdateStory({ ...story, dueDates: next });
-                }}
-              >
-                <Plus className="h-3 w-3" /> {isYearly ? "Add month" : "Add date"}
-              </Button>
+                  </div>
+                )})}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-fit px-2 text-xs"
+                  onClick={() => {
+                    const nextDate = isYearly
+                      ? new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+                      : new Date();
+                    const next = [...dueDates, nextDate];
+                    onUpdateStory({ ...story, dueDates: next });
+                  }}
+                >
+                  <Plus className="h-3 w-3" /> {isYearly ? "Add month" : "Add date"}
+                </Button>
+              </div>
             </div>
-          </div>
-          <div className="space-y-1">
-            <p className="text-[11px] uppercase text-muted-foreground">Completed date</p>
-            <Input
-              type="date"
-              value={completedDateValue}
-              onChange={(e) => {
-                const value = e.target.value;
-                onUpdateStory({
-                  ...story,
-                  completedAt: value ? new Date(`${value}T00:00:00`) : undefined,
-                  status: value ? doneStatus : defaultStatus,
-                });
-              }}
-              className="h-7 w-36 text-xs"
-            />
-          </div>
-        </div>
+            <div className="space-y-1">
+              <p className="text-[11px] uppercase text-muted-foreground">Completed date</p>
+              <Input
+                type="date"
+                value={completedDateValue}
+                onChange={() => {}}
+                disabled
+                className="h-7 w-full text-xs opacity-60 cursor-not-allowed"
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase text-muted-foreground">Quick actions</p>
+              <div className="flex items-center gap-2">
+                <Button size="icon" variant="ghost" onClick={openNewComment} title="Add comment">
+                  <MessageSquare className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsLinkModalOpen(true)}
+                  title="Add link"
+                >
+                  <Globe className="w-4 h-4" />
+                </Button>
+                <input
+                  type="file"
+                  className="hidden"
+                  id="story-attachment-input"
+                  onChange={handleAttachFile}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    const input = document.getElementById("story-attachment-input") as HTMLInputElement | null;
+                    input?.click();
+                  }}
+                  disabled={isUploading}
+                  title="Add attachment"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+        </aside>
+        <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin p-4 lg:pl-6">
         {/* Title */}
         <div className="mb-4 group">
           {isEditingTitle ? (
@@ -661,39 +716,6 @@ export function StoryDetail({
               )}
             </div>
           )}
-        </div>
-
-        {/* Quick actions */}
-        <div className="mb-6 flex items-center gap-2">
-          <Button size="icon" variant="ghost" onClick={openNewComment} title="Add comment">
-            <MessageSquare className="w-4 h-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsLinkModalOpen(true)}
-            title="Add link"
-          >
-            <Globe className="w-4 h-4" />
-          </Button>
-          <input
-            type="file"
-            className="hidden"
-            id="story-attachment-input"
-            onChange={handleAttachFile}
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              const input = document.getElementById("story-attachment-input") as HTMLInputElement | null;
-              input?.click();
-            }}
-            disabled={isUploading}
-            title="Add attachment"
-          >
-            <Paperclip className="w-4 h-4" />
-          </Button>
         </div>
 
         {/* Attachments */}
@@ -813,6 +835,7 @@ export function StoryDetail({
               ))
             )}
           </div>
+        </div>
         </div>
       </div>
 

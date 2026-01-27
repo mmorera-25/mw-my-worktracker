@@ -664,8 +664,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     const normalizedStory = {
       ...updatedStory,
       status: normalizedStatus,
-      dueDates:
-        normalizedDueDates.length > 0 ? normalizedDueDates : [updatedStory.createdAt],
+      dueDates: normalizedDueDates,
     };
     if (updatedStory.status === doneStatus && !updatedStory.completedAt) {
       normalizedStory.completedAt = new Date();
@@ -702,6 +701,10 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
 
   const handleDeleteStory = useCallback(
     (storyId: string) => {
+      const target = stories.find((story) => story.id === storyId);
+      if (target && !window.confirm(`Delete "${target.title}"?`)) {
+        return;
+      }
       setStories((prev) =>
         prev.map((s) =>
           s.id === storyId
@@ -713,7 +716,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         setSelectedStoryId(null);
       }
     },
-    [selectedStoryId]
+    [selectedStoryId, stories]
   );
 
   const handleRestoreStory = useCallback((storyId: string) => {
@@ -728,12 +731,16 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
 
   const handlePermanentDelete = useCallback(
     (storyId: string) => {
+      const target = stories.find((story) => story.id === storyId);
+      if (target && !window.confirm(`Permanently delete "${target.title}"?`)) {
+        return;
+      }
       setStories((prev) => prev.filter((s) => s.id !== storyId));
       if (selectedStoryId === storyId) {
         setSelectedStoryId(null);
       }
     },
-    [selectedStoryId]
+    [selectedStoryId, stories]
   );
   const handleEmptyTrash = useCallback(() => {
     setStories((prev) => {
