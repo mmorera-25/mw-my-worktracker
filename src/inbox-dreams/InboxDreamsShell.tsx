@@ -132,7 +132,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   const [pendingStoryAfterEpic, setPendingStoryAfterEpic] = useState(false);
   const [focusedOkr, setFocusedOkr] = useState<string | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowConfig>({
-    columns: ["Backlog", "Scheduled", "To Ask", "To Do", "Doing", "Done"],
+    columns: ["Backlog", "Scheduled", "On Hold / Waiting", "To Ask", "To Do", "Done"],
     swimlanes: ["Core", "Enablement", "Bugs"],
     accent: "indigo",
   });
@@ -184,6 +184,14 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   const calendarContainerRef = useRef<HTMLDivElement | null>(null);
   const dbContextRef = useRef<DbContext | null>(null);
   const [requiresStorageSetup, setRequiresStorageSetup] = useState(false);
+  const [typeOfWorkOptions, setTypeOfWorkOptions] = useState<string[]>([
+    "Configuration",
+    "Ask question in a Meeting",
+    "Document",
+    "Send Email",
+    "Aligment Required",
+    "Waiting for Answer",
+  ]);
 
   const firstName = useMemo(() => {
     if (user.displayName) {
@@ -219,6 +227,10 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     () => workflow.columns[0] ?? "Backlog",
     [workflow.columns]
   );
+  const statusOptions = useMemo(
+    () => workflow.columns.filter((column) => column !== "Doing"),
+    [workflow.columns]
+  );
 
   useEffect(() => {
     const initConfig = async () => {
@@ -233,6 +245,9 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       setEpics(normalized.epics);
       setStories(normalized.stories);
       setShowArchived(Boolean(inboxState.preferences.showArchived));
+      if (Array.isArray(inboxState.preferences.typeOfWorkOptions)) {
+        setTypeOfWorkOptions(inboxState.preferences.typeOfWorkOptions);
+      }
       setListPaneWidth(inboxState.preferences.listPaneWidth ?? INBOX_LIST_WIDTH);
       setCalendarRightWidth(inboxState.preferences.calendarRightWidth ?? 320);
       setEpicsPaneWidth(clampPaneWidth(inboxState.preferences.epicsPaneWidth ?? 208));
@@ -246,9 +261,12 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     let didNormalize = false;
     const next = stories.map((story) => {
       const normalizedEpicId = getStoryEpicBucketId(story);
-      if (normalizedEpicId === story.epicId) return story;
+      const normalizedStatus = story.status === "Doing" ? "To Do" : story.status;
+      if (normalizedEpicId === story.epicId && normalizedStatus === story.status) {
+        return story;
+      }
       didNormalize = true;
-      return { ...story, epicId: normalizedEpicId };
+      return { ...story, epicId: normalizedEpicId, status: normalizedStatus };
     });
     return didNormalize ? next : stories;
   }, [stories, getStoryEpicBucketId]);
@@ -366,8 +384,14 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     if (normalized.epics !== epics) {
       setEpics(normalized.epics);
     }
-    if (normalized.stories !== stories) {
-      setStories(normalized.stories);
+    const statusNormalized = normalized.stories.map((story) =>
+      story.status === "Doing" ? { ...story, status: "To Do" } : story
+    );
+    const didStatusNormalize = statusNormalized.some(
+      (story, idx) => story !== normalized.stories[idx]
+    );
+    if (normalized.stories !== stories || didStatusNormalize) {
+      setStories(didStatusNormalize ? statusNormalized : normalized.stories);
     }
   }, [epics, stories]);
 
@@ -421,6 +445,9 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       setEpics(normalized.epics);
       setStories(normalized.stories);
       setShowArchived(Boolean(inboxState.preferences.showArchived));
+      if (Array.isArray(inboxState.preferences.typeOfWorkOptions)) {
+        setTypeOfWorkOptions(inboxState.preferences.typeOfWorkOptions);
+      }
       setListPaneWidth(inboxState.preferences.listPaneWidth ?? INBOX_LIST_WIDTH);
       setCalendarRightWidth(inboxState.preferences.calendarRightWidth ?? 320);
       setEpicsPaneWidth(clampPaneWidth(inboxState.preferences.epicsPaneWidth ?? 208));
@@ -554,8 +581,11 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     const normalizedDueDates = (updatedStory.dueDates ?? [])
       .map((date) => (date instanceof Date ? date : new Date(date)))
       .filter((date) => !Number.isNaN(date.getTime()));
+    const normalizedStatus =
+      updatedStory.status === "Doing" ? "To Do" : updatedStory.status;
     const normalizedStory = {
       ...updatedStory,
+      status: normalizedStatus,
       dueDates:
         normalizedDueDates.length > 0 ? normalizedDueDates : [updatedStory.createdAt],
     };
@@ -569,6 +599,15 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       prev.map((s) => (s.id === normalizedStory.id ? normalizedStory : s))
     );
   }, [doneStatus]);
+
+  const handleAddTypeOfWork = useCallback((nextType: string) => {
+    const trimmed = nextType.trim();
+    if (!trimmed) return;
+    setTypeOfWorkOptions((prev) => {
+      if (prev.some((item) => item.toLowerCase() === trimmed.toLowerCase())) return prev;
+      return [...prev, trimmed];
+    });
+  }, []);
 
   const handleRenameEpicFromList = useCallback(() => {
     if (!selectedEpicId) return;
@@ -643,7 +682,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     if (activeView === "search") return "Search";
     if (activeView === "settings") return "Settings";
     if (activeView === "epics") return "Epics";
-    if (activeView === "yearly") return "Yearly";
+    if (activeView === "yearly") return "Yearly Inbox";
     return "Inbox";
   };
 
@@ -746,6 +785,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         calendarRightWidth,
         epicsPaneWidth,
         epicsPaneCollapsed: isEpicsPaneCollapsed,
+        typeOfWorkOptions,
       },
     });
     persistDb(ctx);
@@ -757,6 +797,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     calendarRightWidth,
     epicsPaneWidth,
     isEpicsPaneCollapsed,
+    typeOfWorkOptions,
   ]);
   useEffect(() => {
     const handleExternalUpdate = async () => {
@@ -851,6 +892,9 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       setEpics(normalized.epics);
       setStories(normalized.stories);
       setShowArchived(Boolean(inboxState.preferences.showArchived));
+      if (Array.isArray(inboxState.preferences.typeOfWorkOptions)) {
+        setTypeOfWorkOptions(inboxState.preferences.typeOfWorkOptions);
+      }
       setListPaneWidth(inboxState.preferences.listPaneWidth ?? INBOX_LIST_WIDTH);
       setCalendarRightWidth(inboxState.preferences.calendarRightWidth ?? 320);
       setEpicsPaneWidth(clampPaneWidth(inboxState.preferences.epicsPaneWidth ?? 208));
@@ -1408,7 +1452,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
               <StoryList
                 stories={filteredStories}
                 epics={epics}
-                statusOptions={workflow.columns}
+                statusOptions={statusOptions}
                 doneStatus={doneStatus}
                 defaultStatus={defaultStatus}
                 selectedStoryId={selectedStoryId}
@@ -1472,10 +1516,12 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                   story={selectedStory}
                   epic={epics.find((e) => e.id === selectedStory.epicId)}
                   epics={epics}
-                  statusOptions={workflow.columns}
+                  statusOptions={statusOptions}
                   doneStatus={doneStatus}
                   defaultStatus={defaultStatus}
                   dateMode={dateMode}
+                  typeOfWorkOptions={typeOfWorkOptions}
+                  onAddTypeOfWork={handleAddTypeOfWork}
                   onUpdateStory={handleUpdateStory}
                   onOpenMeetings={() => setActiveView("oneonone")}
                   onDeleteStory={handleDeleteStory}
@@ -1566,10 +1612,12 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         epics={activeEpics}
         selectedEpicId={selectedEpicId || undefined}
         initialTitle={pendingStoryTitle}
-        statusOptions={workflow.columns}
+        statusOptions={statusOptions}
         defaultStatus={defaultStatus}
         dateMode={dateMode}
         isYearly={activeView === "yearly"}
+        typeOfWorkOptions={typeOfWorkOptions}
+        onAddTypeOfWork={handleAddTypeOfWork}
         onRequestCreateEpic={() => {
           setIsCreateStoryOpen(false);
           setIsCreateEpicOpen(true);

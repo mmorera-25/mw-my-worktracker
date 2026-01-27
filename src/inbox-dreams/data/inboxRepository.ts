@@ -7,6 +7,7 @@ export type InboxPreferences = {
   calendarRightWidth?: number;
   epicsPaneWidth?: number;
   epicsPaneCollapsed?: boolean;
+  typeOfWorkOptions?: string[];
 };
 
 export type InboxState = {
@@ -82,6 +83,7 @@ const deserializeStory = (raw: Partial<Story>): Story => ({
   title: raw.title || "Untitled story",
   description: raw.description || "",
   epicId: raw.epicId || "",
+  typeOfWork: raw.typeOfWork || "",
   dueDates: Array.isArray(raw.dueDates) && raw.dueDates.length > 0
     ? raw.dueDates.map((date) => toDate(date))
     : [toDate(raw.createdAt)],

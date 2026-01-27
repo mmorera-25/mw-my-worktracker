@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { ChevronDown, ChevronRight, Plus, MoreVertical, Trash2, RotateCcw, ListTodo, Activity, Inbox, CheckCircle, CalendarCheck, XCircle, HelpCircle, Pencil, Search } from "lucide-react";
+import { isToday } from "date-fns";
+import { ChevronDown, ChevronRight, Plus, MoreVertical, Trash2, RotateCcw, ListTodo, Inbox, CheckCircle, CalendarCheck, XCircle, HelpCircle, Pencil, Search, PauseCircle } from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { StoryListItem } from "./StoryListItem";
 import { Input } from "@inbox/components/ui/input";
@@ -71,23 +72,34 @@ function StatusGroup({
   onDeleteStory,
   defaultExpanded = true
 }: DateGroupProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
+  const [isExpanded, setIsExpanded] = useState(
+    defaultExpanded && title !== "On Hold / Waiting"
+  );
   const iconMap: Record<string, React.ReactNode> = {
     Scheduled: <CalendarCheck className="w-4 h-4 text-muted-foreground" />,
+    "On Hold / Waiting": <PauseCircle className="w-4 h-4 text-muted-foreground" />,
     "To Ask": <HelpCircle className="w-4 h-4 text-muted-foreground" />,
     "To Do": <ListTodo className="w-4 h-4 text-muted-foreground" />,
-    Doing: <Activity className="w-4 h-4 text-muted-foreground" />,
     Backlog: <Inbox className="w-4 h-4 text-muted-foreground" />,
     Done: <CheckCircle className="w-4 h-4 text-muted-foreground" />,
   };
+  const getEffectiveDueDate = (story: Story) => {
+    const dates = story.dueDates && story.dueDates.length > 0 ? story.dueDates : [story.createdAt];
+    const sorted = dates.slice().sort((a, b) => a.getTime() - b.getTime());
+    const now = new Date();
+    const upcoming = sorted.find((date) => date >= now);
+    return upcoming ?? sorted[sorted.length - 1];
+  };
+
   const sortedStories = useMemo(() => {
-    const priorityOrder: Record<Story["priority"], number> = {
-      high: 0,
-      medium: 1,
-      low: 2,
-    };
     return stories.slice().sort((a, b) => {
-      return priorityOrder[a.priority] - priorityOrder[b.priority];
+      const aDate = getEffectiveDueDate(a);
+      const bDate = getEffectiveDueDate(b);
+      const aIsToday = isToday(aDate);
+      const bIsToday = isToday(bDate);
+      if (aIsToday && !bIsToday) return -1;
+      if (!aIsToday && bIsToday) return 1;
+      return aDate.getTime() - bDate.getTime();
     });
   }, [stories]);
 
@@ -131,6 +143,12 @@ function StatusGroup({
                 onUpdateStory({
                   ...story,
                   priority,
+                })
+              }
+              onDueDateChange={(date) =>
+                onUpdateStory({
+                  ...story,
+                  dueDates: [date],
                 })
               }
               onDelete={() => onDeleteStory(story.id)}
@@ -178,7 +196,7 @@ export function StoryList({
   const isSearchView = activeView === "search";
 
   const groupedStories = useMemo(() => {
-    const orderedStatuses = ["To Ask", "To Do", "Doing", "Scheduled", "Backlog", "Done"];
+    const orderedStatuses = ["On Hold / Waiting", "To Ask", "To Do", "Scheduled", "Backlog", "Done"];
     const remaining = statusOptions.filter((status) => !orderedStatuses.includes(status));
     const groups = [...orderedStatuses, ...remaining].map((status) => ({
       status,
@@ -379,22 +397,24 @@ export function StoryList({
       {/* Story Groups */}
       <div className="flex-1 overflow-y-auto scrollbar-thin py-2">
         {groupedStories.map((group) => (
-            <StatusGroup
-              key={`${group.status}-${isSearchView ? "search" : "normal"}`}
-              title={group.status}
-              count={group.stories.length}
-              stories={group.stories}
-              epics={epics}
-              doneStatus={doneStatus}
-              defaultStatus={defaultStatus}
-              selectedStoryId={selectedStoryId}
-              dateMode={dateMode}
-              onSelectStory={onSelectStory}
-              onUpdateStory={onUpdateStory}
-              onDeleteStory={onDeleteStory}
-              defaultExpanded={isSearchView || group.status !== "Done"}
-            />
-          ))}
+          <StatusGroup
+            key={`${group.status}-${isSearchView ? "search" : "normal"}`}
+            title={group.status}
+            count={group.stories.length}
+            stories={group.stories}
+            epics={epics}
+            doneStatus={doneStatus}
+            defaultStatus={defaultStatus}
+            selectedStoryId={selectedStoryId}
+            dateMode={dateMode}
+            onSelectStory={onSelectStory}
+            onUpdateStory={onUpdateStory}
+            onDeleteStory={onDeleteStory}
+            defaultExpanded={
+              isSearchView || (group.status !== "Done" && group.status !== "On Hold / Waiting")
+            }
+          />
+        ))}
 
         {stories.length === 0 && (
           <div className="p-8 text-center text-muted-foreground">

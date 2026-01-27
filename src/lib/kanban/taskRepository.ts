@@ -132,7 +132,7 @@ export const getConfigDefaults = (db: Database) => {
   const swimRow = fetch.step() ? (fetch.get()[0] as string) : null
   fetch.free()
   return {
-    columns: columnsRow ? JSON.parse(columnsRow) : ['Backlog', 'To Do', 'Doing', 'Done'],
+    columns: columnsRow ? JSON.parse(columnsRow) : ['Backlog', 'On Hold / Waiting', 'To Do', 'Done'],
     swimlanes: swimRow ? JSON.parse(swimRow) : ['Core', 'Enablement', 'Bugs'],
   }
 }

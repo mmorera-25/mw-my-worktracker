@@ -20,6 +20,13 @@ import {
 } from "@inbox/components/ui/select";
 import { Epic, Story } from "@inbox/types";
 import { EpicIcon } from "./EpicIcon";
+import {
+  Dialog as SubDialog,
+  DialogContent as SubDialogContent,
+  DialogFooter as SubDialogFooter,
+  DialogHeader as SubDialogHeader,
+  DialogTitle as SubDialogTitle,
+} from "@inbox/components/ui/dialog";
 
 interface CreateStoryDialogProps {
   open: boolean;
@@ -33,6 +40,8 @@ interface CreateStoryDialogProps {
   onCreateStory: (story: Omit<Story, "id" | "key" | "createdAt">) => void;
   dateMode?: "day" | "month";
   isYearly?: boolean;
+  typeOfWorkOptions: string[];
+  onAddTypeOfWork: (value: string) => void;
 }
 
 export function CreateStoryDialog({
@@ -47,17 +56,28 @@ export function CreateStoryDialog({
   onCreateStory,
   dateMode = "day",
   isYearly = false,
+  typeOfWorkOptions,
+  onAddTypeOfWork,
 }: CreateStoryDialogProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [epicId, setEpicId] = useState(selectedEpicId || "");
   const [priority, setPriority] = useState<Story["priority"]>("low");
   const [status, setStatus] = useState(defaultStatus);
+  const [typeOfWork, setTypeOfWork] = useState("");
+  const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+  const [customTypeValue, setCustomTypeValue] = useState("");
   const [dueMonth, setDueMonth] = useState(format(new Date(), "yyyy-MM"));
   const titleRef = useRef<HTMLInputElement | null>(null);
   const availableEpics = epics.filter((epic) => !epic.isArchived);
+  const noEpicId = availableEpics.find(
+    (epic) =>
+      epic.id === "no-epic-assigned" ||
+      epic.name.toLowerCase() === "no epic assigned"
+  )?.id;
   const defaultEpicId =
     availableEpics.find((epic) => epic.id === selectedEpicId)?.id ??
+    noEpicId ??
     availableEpics[0]?.id ??
     "";
   const hasEpics = availableEpics.length > 0;
@@ -66,11 +86,21 @@ export function CreateStoryDialog({
     if (open) {
       setEpicId(defaultEpicId);
       setTitle(initialTitle || "");
-      setStatus(defaultStatus);
+      const shouldDefaultToTodo = !selectedEpicId;
+      const nextStatus = isYearly
+        ? statusOptions.includes("Backlog")
+          ? "Backlog"
+          : defaultStatus
+        : shouldDefaultToTodo && statusOptions.includes("To Do")
+        ? "To Do"
+        : defaultStatus;
+      setStatus(nextStatus);
+      setTypeOfWork("");
+      setCustomTypeValue("");
       setDueMonth(format(new Date(), "yyyy-MM"));
       requestAnimationFrame(() => titleRef.current?.focus());
     }
-  }, [open, defaultEpicId, initialTitle, defaultStatus]);
+  }, [open, defaultEpicId, initialTitle, defaultStatus, selectedEpicId, statusOptions, isYearly]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,6 +120,7 @@ export function CreateStoryDialog({
       status,
       priority,
       isYearly,
+      typeOfWork: typeOfWork.trim(),
     });
 
     setTitle("");
@@ -97,6 +128,7 @@ export function CreateStoryDialog({
     setEpicId(defaultEpicId);
     setPriority("low");
     setStatus(defaultStatus);
+    setTypeOfWork("");
     onOpenChange(false);
   };
 
@@ -178,6 +210,32 @@ export function CreateStoryDialog({
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="type-of-work">Type of work</Label>
+            <Select
+              value={typeOfWork}
+              onValueChange={(value) => {
+                if (value === "__other__") {
+                  setIsTypeModalOpen(true);
+                  return;
+                }
+                setTypeOfWork(value);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select type of work" />
+              </SelectTrigger>
+              <SelectContent>
+                {typeOfWorkOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+                <SelectItem value="__other__">Other...</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
@@ -211,6 +269,45 @@ export function CreateStoryDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <SubDialog open={isTypeModalOpen} onOpenChange={setIsTypeModalOpen}>
+        <SubDialogContent className="sm:max-w-sm">
+          <SubDialogHeader>
+            <SubDialogTitle>Add type of work</SubDialogTitle>
+          </SubDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="custom-type">Type of work</Label>
+            <Input
+              id="custom-type"
+              value={customTypeValue}
+              onChange={(e) => setCustomTypeValue(e.target.value)}
+              placeholder="Enter a custom type"
+            />
+          </div>
+          <SubDialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsTypeModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                const next = customTypeValue.trim();
+                if (!next) return;
+                onAddTypeOfWork(next);
+                setTypeOfWork(next);
+                setCustomTypeValue("");
+                setIsTypeModalOpen(false);
+              }}
+            >
+              Save
+            </Button>
+          </SubDialogFooter>
+        </SubDialogContent>
+      </SubDialog>
     </Dialog>
   );
 }

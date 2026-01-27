@@ -7,7 +7,7 @@ export type WorkflowConfig = {
 }
 
 const defaultConfig: WorkflowConfig = {
-  columns: ['Backlog', 'Scheduled', 'To Ask', 'To Do', 'Doing', 'Done'],
+  columns: ['Backlog', 'Scheduled', 'On Hold / Waiting', 'To Ask', 'To Do', 'Done'],
   swimlanes: ['Core', 'Enablement', 'Bugs'],
   accent: 'indigo',
 }
@@ -41,6 +41,17 @@ export const loadWorkflowConfig = (db: Database): WorkflowConfig => {
       'Scheduled',
       ...columns.filter((col: string) => col !== 'Backlog'),
     ]
+  }
+  if (!columnsSet.has('On Hold / Waiting')) {
+    columns = [
+      'Backlog',
+      'Scheduled',
+      'On Hold / Waiting',
+      ...columns.filter((col: string) => !['Backlog', 'Scheduled'].includes(col)),
+    ]
+  }
+  if (columnsSet.has('Doing')) {
+    columns = columns.filter((col: string) => col !== 'Doing')
   }
   const swimlanes = get_json(db, 'kanban_swimlanes') ?? defaultConfig.swimlanes
   const accent = (get_json(db, 'accent_color') as WorkflowConfig['accent'] | null) ?? 'indigo'

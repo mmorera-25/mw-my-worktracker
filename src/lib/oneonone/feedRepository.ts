@@ -7,7 +7,7 @@ export const listFeedTasks = (db: Database): Task[] => {
   const stmt = db.prepare(
     `SELECT id, title, project, enablement_id, description, config_notes, complexity, time_value, time_unit, sprint, start_date, due_date, impact_percent, okr_link, lane, swimlane, created_at, updated_at, latest_update, discussed
      FROM tasks
-     WHERE lane IN ('Backlog','To Do','Doing','Done')
+     WHERE lane IN ('Backlog','To Do','Done')
      ORDER BY updated_at DESC`,
   )
   const tasks: Task[] = []

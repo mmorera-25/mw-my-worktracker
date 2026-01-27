@@ -15,6 +15,7 @@ export interface Story {
   epicId: string;
   discussed?: boolean;
   dueDates: Date[];
+  typeOfWork?: string;
   assignee?: User;
   status: string;
   priority: 'low' | 'medium' | 'high';

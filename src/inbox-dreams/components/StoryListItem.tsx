@@ -1,9 +1,10 @@
+import { useRef } from "react";
 import { Story, Epic } from "@inbox/types";
 import { cn } from "@inbox/lib/utils";
 import { Checkbox } from "@inbox/components/ui/checkbox";
 import { Button } from "@inbox/components/ui/button";
 import { Trash2, RotateCcw, Flag } from "lucide-react";
-import { format, isPast, isSameMonth, isToday, startOfMonth } from "date-fns";
+import { differenceInCalendarDays, format, isPast, isSameMonth, isToday, startOfMonth } from "date-fns";
 
 interface StoryListItemProps {
   story: Story;
@@ -15,6 +16,7 @@ interface StoryListItemProps {
   onToggleComplete: () => void;
   onPriorityChange?: (priority: Story["priority"]) => void;
   onCompletedDateChange?: (date?: Date) => void;
+  onDueDateChange?: (date: Date) => void;
   onDelete?: () => void;
   onRestore?: () => void;
   onPermanentDelete?: () => void;
@@ -40,29 +42,42 @@ export function StoryListItem({
   onToggleComplete,
   onPriorityChange,
   onCompletedDateChange,
+  onDueDateChange,
   onDelete,
   onRestore,
   onPermanentDelete,
   isTrashView,
   isCompletedView,
 }: StoryListItemProps) {
+  const dueInputRef = useRef<HTMLInputElement | null>(null);
   const effectiveDueDate = getEffectiveDueDate(story);
   const completedDate = story.completedAt;
   const isCompleted = story.status === doneStatus;
   const displayDate = isCompleted && completedDate ? completedDate : effectiveDueDate;
   const isMonthly = dateMode === "month" || Boolean(story.isYearly);
+  const isOnHold = story.status === "On Hold / Waiting";
   const isDueToday = isMonthly ? isSameMonth(displayDate, new Date()) : isToday(displayDate);
   const isOverdue =
     !isCompleted &&
     !isDueToday &&
     (isMonthly ? displayDate < startOfMonth(new Date()) : isPast(displayDate));
   const isDoneDisplay = isCompleted && completedDate;
+  const dueDays = differenceInCalendarDays(effectiveDueDate, new Date());
+  const dueText =
+    dueDays === 0
+      ? "Due today"
+      : dueDays > 0
+      ? `Due in ${dueDays} day${dueDays === 1 ? "" : "s"}`
+      : `Due ${Math.abs(dueDays)} day${Math.abs(dueDays) === 1 ? "" : "s"} ago`;
+  const dueWithType = story.typeOfWork
+    ? `${dueText} | ${story.typeOfWork}`
+    : dueText;
   const quarterLabel = `Q${Math.floor(displayDate.getMonth() / 3) + 1}`;
 
   return (
     <div
       className={cn(
-        "group flex items-start gap-3 px-4 py-3 transition-all cursor-pointer",
+        "group flex items-start gap-3 pl-4 pr-0 py-3 transition-all cursor-pointer",
         "hover:bg-hover-overlay",
         isSelected && "bg-selected-bg"
       )}
@@ -88,7 +103,7 @@ export function StoryListItem({
               )}
             />
           </div>
-          <div className="grid grid-cols-[auto,minmax(0,1fr),auto] items-start gap-3 w-full">
+          <div className="grid grid-cols-[auto,minmax(0,1fr),auto,auto] items-start gap-3 w-full">
             <div className="flex items-center text-xs text-muted-foreground self-center">
               <span
                 className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold text-white"
@@ -98,94 +113,161 @@ export function StoryListItem({
               </span>
             </div>
             <div className="min-w-0 flex flex-col">
+              <p className="text-[11px] text-muted-foreground">
+                {epic?.name ?? "No epic"}
+              </p>
               <div className="flex items-center gap-2">
                 <h3
                   className={cn(
-                    "m-0 text-sm leading-tight truncate flex-1",
+                    "m-0 text-sm leading-tight line-clamp-2 flex-1",
                     isCompleted ? "text-muted-foreground line-through" : "text-foreground"
                   )}
                 >
                   {story.title}
                 </h3>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                  {onPriorityChange && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const priorities: Story["priority"][] = ["low", "medium", "high"];
-                        const currentIndex = priorities.indexOf(story.priority);
-                        const nextIndex = (currentIndex + 1) % priorities.length;
-                        onPriorityChange(priorities[nextIndex]);
-                      }}
-                      title="Change priority"
-                      aria-label="Change priority"
-                    >
-                      <Flag
-                        className={cn(
-                          "w-3.5 h-3.5",
-                          story.priority === "high" &&
-                            "text-destructive fill-destructive",
-                          story.priority === "medium" && "text-yellow-500",
-                          story.priority === "low" && "text-muted-foreground"
-                        )}
-                      />
-                    </Button>
-                  )}
-                  {onDelete && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 text-muted-foreground hover:text-destructive"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete();
-                      }}
-                      title="Move to trash"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  )}
-                </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                {story.description
-                  ? story.description.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
-                  : "No description"}
-              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">{dueWithType}</p>
             </div>
             <div className="-ml-1 flex flex-col items-center justify-center">
-              <span
+              <button
+                type="button"
                 className={cn(
-                  "flex h-12 w-12 flex-col items-center justify-center rounded-md border text-[10px] font-semibold leading-tight",
-                  isDoneDisplay
+                  "relative flex h-14 w-12 flex-col items-center justify-center gap-0.5 rounded-md border text-[10px] font-semibold leading-tight transition-colors",
+                  isOnHold
+                    ? "border-border bg-transparent text-muted-foreground"
+                    : isDoneDisplay
                     ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-700"
                     : isDueToday
-                    ? "border-yellow-500/60 bg-yellow-500/15 text-yellow-700"
+                    ? "border-yellow-500/60 bg-yellow-500/15 text-yellow-700 due-today-pulse"
                     : isOverdue
                     ? "border-destructive/50 bg-destructive/10 text-destructive"
-                    : "border-border bg-surface-2 text-muted-foreground"
+                    : "border-border bg-surface-2 text-muted-foreground",
+                  onDueDateChange ? "hover:bg-hover-overlay cursor-pointer" : "cursor-default"
                 )}
+                aria-label="Change due date"
+                title="Change due date"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!onDueDateChange) return;
+                  const input = dueInputRef.current;
+                  if (!input) return;
+                  input.focus();
+                  if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === "function") {
+                    (input as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+                  }
+                }}
               >
-                <span
-                  className={cn(
-                    "text-lg font-semibold leading-none",
-                    isDoneDisplay
-                      ? "text-emerald-700"
-                      : isDueToday
-                      ? "text-yellow-700"
-                      : "text-blue-600"
-                  )}
-                >
-                  {isMonthly ? quarterLabel : format(displayDate, "d")}
-                </span>
-                <span className="text-[10px] font-semibold">
-                  {isMonthly ? format(displayDate, "MMM") : format(displayDate, "EEE").toUpperCase()}
-                </span>
-              </span>
+                <input
+                  ref={dueInputRef}
+                  type={isMonthly ? "month" : "date"}
+                  value={format(displayDate, isMonthly ? "yyyy-MM" : "yyyy-MM-dd")}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (!value) return;
+                    const nextDate = isMonthly
+                      ? new Date(`${value}-01T00:00:00`)
+                      : new Date(`${value}T00:00:00`);
+                    onDueDateChange?.(nextDate);
+                  }}
+                  className="due-date-input absolute inset-0 z-10 h-full w-full cursor-pointer"
+                  aria-hidden="true"
+                  disabled={!onDueDateChange}
+                />
+                {isMonthly ? (
+                  <>
+                    <span
+                      className={cn(
+                        "text-lg font-semibold leading-none pointer-events-none",
+                        isDoneDisplay
+                          ? "text-emerald-700"
+                          : "text-blue-600"
+                      )}
+                    >
+                      {quarterLabel}
+                    </span>
+                    <span className="text-[10px] font-semibold pointer-events-none">
+                      {format(displayDate, "MMM")}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span
+                      className={cn(
+                        "text-[10px] font-semibold pointer-events-none",
+                        isOnHold ? "text-muted-foreground" : ""
+                      )}
+                    >
+                      {format(displayDate, "EEE").toUpperCase()}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-lg font-semibold leading-none pointer-events-none",
+                        isDoneDisplay
+                          ? "text-emerald-700"
+                          : isOnHold
+                          ? "text-foreground"
+                          : "text-blue-600"
+                      )}
+                    >
+                      {format(displayDate, "d")}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[10px] font-bold pointer-events-none",
+                        isOnHold ? "text-muted-foreground" : ""
+                      )}
+                    >
+                      {format(displayDate, "MMM").toUpperCase()}
+                    </span>
+                  </>
+                )}
+              </button>
             </div>
+            {(onPriorityChange || onDelete) && (
+              <div className="flex flex-col items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                {onPriorityChange && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const priorities: Story["priority"][] = ["low", "medium", "high"];
+                      const currentIndex = priorities.indexOf(story.priority);
+                      const nextIndex = (currentIndex + 1) % priorities.length;
+                      onPriorityChange(priorities[nextIndex]);
+                    }}
+                    title="Change priority"
+                    aria-label="Change priority"
+                  >
+                    <Flag
+                      className={cn(
+                        "w-3.5 h-3.5",
+                        story.priority === "high" &&
+                          "text-destructive fill-destructive",
+                        story.priority === "medium" && "text-yellow-500",
+                        story.priority === "low" && "text-muted-foreground"
+                      )}
+                    />
+                  </Button>
+                )}
+                {onDelete && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                    title="Move to trash"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -231,6 +313,7 @@ export function StoryListItem({
           />
         ) : null}
       </div>
+
     </div>
   );
 }

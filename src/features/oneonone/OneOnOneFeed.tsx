@@ -78,7 +78,7 @@ const isStoryDone = (story: Story, doneStatusNormalized: string) => {
   return false
 }
 
-const BASE_STATUSES = ['Backlog', 'Scheduled', 'To Ask', 'To Do', 'Doing', 'Done']
+const BASE_STATUSES = ['Backlog', 'Scheduled', 'To Ask', 'To Do', 'Done']
 
 const OneOnOneFeed = ({
   userFirstName,
@@ -109,6 +109,14 @@ const OneOnOneFeed = ({
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [typeOfWorkOptions, setTypeOfWorkOptions] = useState<string[]>([
+    'Configuration',
+    'Ask question in a Meeting',
+    'Document',
+    'Send Email',
+    'Aligment Required',
+    'Waiting for Answer',
+  ])
 
   useEffect(() => {
     const init = async () => {
@@ -117,6 +125,9 @@ const OneOnOneFeed = ({
         const inboxState = loadInboxState(ctx.db)
         setEpics(inboxState.epics)
         setStories(inboxState.stories)
+        if (Array.isArray(inboxState.preferences.typeOfWorkOptions)) {
+          setTypeOfWorkOptions(inboxState.preferences.typeOfWorkOptions)
+        }
         const storedParticipants = loadMeetingParticipants(ctx.db)
         setParticipants(storedParticipants)
         await persistDb(ctx)
@@ -214,6 +225,20 @@ const OneOnOneFeed = ({
     saveInboxState(ctx.db, { ...inboxState, stories: nextStories })
     await persistDb(ctx)
     window.dispatchEvent(new Event('inbox-stories-updated'))
+  }
+
+  const persistTypeOfWorkOptions = async (next: string[]) => {
+    setTypeOfWorkOptions(next)
+    const ctx = await loadDb()
+    const inboxState = loadInboxState(ctx.db)
+    saveInboxState(ctx.db, {
+      ...inboxState,
+      preferences: {
+        ...inboxState.preferences,
+        typeOfWorkOptions: next,
+      },
+    })
+    await persistDb(ctx)
   }
 
   const persistParticipants = async (next: MeetingParticipant[]) => {
@@ -415,6 +440,16 @@ const OneOnOneFeed = ({
       story.id === updatedStory.id ? updatedStory : story,
     )
     await persistStories(nextStories)
+  }
+
+  const handleAddTypeOfWork = async (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return
+    const exists = typeOfWorkOptions.some(
+      (option) => option.toLowerCase() === trimmed.toLowerCase(),
+    )
+    if (exists) return
+    await persistTypeOfWorkOptions([...typeOfWorkOptions, trimmed])
   }
 
   const handleDeleteStory = async (storyId: string) => {
@@ -1102,7 +1137,7 @@ const OneOnOneFeed = ({
         open={Boolean(selectedStory)}
         onClose={() => setSelectedStoryId(null)}
         title={selectedStory ? selectedStory.title : undefined}
-        contentClassName="max-w-6xl h-[85vh]"
+        contentClassName="max-w-[95vw] w-[92vw] h-[85vh] min-h-[520px] min-w-[720px] resize overflow-auto"
       >
         {selectedStory ? (
           <StoryDetail
@@ -1112,6 +1147,8 @@ const OneOnOneFeed = ({
             statusOptions={statusOptions}
             doneStatus={doneStatus}
             defaultStatus={defaultStatus}
+            typeOfWorkOptions={typeOfWorkOptions}
+            onAddTypeOfWork={handleAddTypeOfWork}
             onUpdateStory={handleUpdateStory}
             onDeleteStory={handleDeleteStory}
           />

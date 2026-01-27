@@ -10,6 +10,7 @@ import {
   Globe,
   MessageSquare,
   XCircle,
+  X,
 } from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { Button } from "@inbox/components/ui/button";
@@ -25,7 +26,7 @@ import {
   SelectValue,
 } from "@inbox/components/ui/select";
 import { cn } from "@inbox/lib/utils";
-import { format, differenceInCalendarDays, isSameDay } from "date-fns";
+import { format, differenceInCalendarDays, isSameDay, isValid } from "date-fns";
 import { loadDirectoryHandle } from "../../lib/storage/handleStore";
 
 interface StoryDetailProps {
@@ -39,6 +40,8 @@ interface StoryDetailProps {
   onOpenMeetings?: () => void;
   onDeleteStory?: (storyId: string) => void;
   dateMode?: "day" | "month";
+  typeOfWorkOptions?: string[];
+  onAddTypeOfWork?: (value: string) => void;
 }
 
 const getDueDates = (story: Story) => {
@@ -87,6 +90,8 @@ export function StoryDetail({
   onOpenMeetings,
   onDeleteStory,
   dateMode = "day",
+  typeOfWorkOptions = [],
+  onAddTypeOfWork,
 }: StoryDetailProps) {
   const [title, setTitle] = useState(story.title);
   const [description, setDescription] = useState(story.description);
@@ -99,6 +104,8 @@ export function StoryDetail({
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [linkTitle, setLinkTitle] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
+  const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
+  const [customTypeValue, setCustomTypeValue] = useState("");
 
   useEffect(() => {
     setTitle(story.title);
@@ -412,16 +419,50 @@ export function StoryDetail({
             </Select>
           </div>
           <div className="space-y-1">
+            <p className="text-[11px] uppercase text-muted-foreground">Type of work</p>
+            <Select
+              value={story.typeOfWork ?? ""}
+              onValueChange={(value) => {
+                if (value === "__other__") {
+                  setIsTypeModalOpen(true);
+                  return;
+                }
+                onUpdateStory({ ...story, typeOfWork: value });
+              }}
+            >
+              <SelectTrigger className="h-7 w-40 text-xs">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+              {typeOfWorkOptions.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+              <SelectItem value="__other__">Other...</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+          <div className="space-y-1">
             <p className="text-[11px] uppercase text-muted-foreground">
               {isYearly ? "Due months" : "Due dates"}
             </p>
             <div className="space-y-2">
-              {dueDates.map((date, index) => (
-                <div key={`${date.getTime()}-${index}`} className="flex items-center gap-2">
+              {dueDates.map((date, index) => {
+                const parsedKey =
+                  date instanceof Date ? date : new Date(date as unknown as string);
+                const keyTime = isValid(parsedKey) ? parsedKey.getTime() : Date.now();
+                return (
+                <div key={`${keyTime}-${index}`} className="flex items-center gap-2">
+                  {(() => {
+                    const parsed =
+                      date instanceof Date ? date : new Date(date as unknown as string);
+                    const safeDate = isValid(parsed) ? parsed : new Date();
+                    return (
                   <Input
                     type={isYearly ? "month" : "date"}
                     value={format(
-                      new Date(date),
+                      safeDate,
                       isYearly ? "yyyy-MM" : "yyyy-MM-dd"
                     )}
                     onChange={(e) => {
@@ -437,6 +478,8 @@ export function StoryDetail({
                     }}
                     className="h-7 w-36 text-xs"
                   />
+                    );
+                  })()}
                   {dueDates.length > 1 && (
                     <Button
                       type="button"
@@ -453,7 +496,7 @@ export function StoryDetail({
                     </Button>
                   )}
                 </div>
-              ))}
+              )})}
               <Button
                 type="button"
                 variant="ghost"
@@ -782,6 +825,40 @@ export function StoryDetail({
                 !linkUrl.trim() ||
                 !(linkUrl.trim().startsWith("http://") || linkUrl.trim().startsWith("https://"))
               }
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+      <Dialog
+        open={isTypeModalOpen}
+        onClose={() => setIsTypeModalOpen(false)}
+        title="Add type of work"
+      >
+        <div className="space-y-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-xs uppercase text-muted-foreground">Type of work</span>
+            <Input
+              value={customTypeValue}
+              onChange={(e) => setCustomTypeValue(e.target.value)}
+              placeholder="Enter a custom type"
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setIsTypeModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                const next = customTypeValue.trim();
+                if (!next) return;
+                onAddTypeOfWork?.(next);
+                onUpdateStory({ ...story, typeOfWork: next });
+                setCustomTypeValue("");
+                setIsTypeModalOpen(false);
+              }}
+              disabled={!customTypeValue.trim()}
             >
               Save
             </Button>

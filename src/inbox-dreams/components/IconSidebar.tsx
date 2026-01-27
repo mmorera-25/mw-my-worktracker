@@ -35,7 +35,7 @@ interface IconSidebarProps {
 
 const topIcons = [
   { id: "week", icon: Inbox, label: "Inbox" },
-  { id: "yearly", icon: CalendarRange, label: "Yearly" },
+  { id: "yearly", icon: CalendarRange, label: "Yearly Inbox" },
   { id: "today", icon: Calendar, label: "Calendar" },
   { id: "search", icon: Search, label: "Search" },
 ];
