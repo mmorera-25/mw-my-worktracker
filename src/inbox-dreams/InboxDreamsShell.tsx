@@ -7,6 +7,7 @@ import { StoryDetail } from "@inbox/components/StoryDetail";
 import { EmptyState } from "@inbox/components/EmptyState";
 import { CreateEpicDialog } from "@inbox/components/CreateEpicDialog";
 import { CreateStoryDialog } from "@inbox/components/CreateStoryDialog";
+import { Dialog, DialogContent } from "@inbox/components/ui/dialog";
 import type { Epic, Story } from "@inbox/types";
 import DataStoragePanel from "../features/settings/DataStoragePanel";
 import MeetingNotes from "../features/notes/MeetingNotes";
@@ -27,7 +28,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import { Archive, ArrowLeft } from "lucide-react";
+import { Archive, ArrowLeft, Inbox } from "lucide-react";
 
 type InboxDreamsShellProps = {
   user: FirebaseUser;
@@ -130,6 +131,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   const [editingEpic, setEditingEpic] = useState<Epic | null>(null);
   const [isCreateStoryOpen, setIsCreateStoryOpen] = useState(false);
   const [pendingStoryAfterEpic, setPendingStoryAfterEpic] = useState(false);
+  const [isInboxModalOpen, setIsInboxModalOpen] = useState(false);
+  const [modalActiveView, setModalActiveView] = useState("week");
   const [focusedOkr, setFocusedOkr] = useState<string | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowConfig>({
     columns: ["Backlog", "Scheduled", "On Hold / Waiting", "To Ask", "To Do", "Done"],
@@ -296,73 +299,85 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     const clamped = Math.min(maxWidth, Math.max(LIST_MIN_WIDTH, listPaneWidth));
     return Number.isNaN(clamped) ? listPaneWidth : clamped;
   }, [detailContainerWidth, epicsPaneTotalWidth, listPaneWidth]);
+  const modalListWidth = Math.min(listPaneWidth, 520);
 
-  const filteredStories = useMemo(() => {
-    let result =
-      activeView === "yearly"
-        ? yearlyStories
-        : activeView === "trash"
-        ? normalizedStories
-        : regularStories;
+  const buildFilteredStories = useCallback(
+    (view: string) => {
+      let result =
+        view === "yearly"
+          ? yearlyStories
+          : view === "trash"
+          ? normalizedStories
+          : regularStories;
 
-    if (activeView === "trash") {
-      result = result.filter((s) => s.isDeleted);
-    } else {
-      result = result.filter((s) => !s.isDeleted);
-    }
-
-    if (selectedEpicId && !["completed", "trash"].includes(activeView)) {
-      result = result.filter((s) => s.epicId === selectedEpicId);
-    }
-    if (activeView === "search" && searchQuery.trim()) {
-      const term = searchQuery.trim().toLowerCase();
-      result = result.filter((story) => {
-        const content = [
-          story.title,
-          story.description,
-          ...(story.comments?.map((comment) => comment.text) ?? []),
-        ]
-          .filter(Boolean)
-          .map((entry) =>
-            String(entry)
-              .replace(/<[^>]+>/g, " ")
-              .toLowerCase()
-          );
-        return content.some((entry) => entry.includes(term));
-      });
-    }
-    if (activeView === "week") {
-      if (showDueTodayOnly) {
-        const today = new Date();
-        result = result.filter(
-          (story) =>
-            story.dueDates?.some((date) => isSameDay(date, today)) ?? false
-        );
-      } else if (showDueThisWeekOnly) {
-        const today = new Date();
-        const weekStart = startOfWeek(today, { weekStartsOn: 0 });
-        const weekEnd = endOfWeek(today, { weekStartsOn: 0 });
-        result = result.filter(
-          (story) =>
-            story.dueDates?.some(
-              (date) => date >= weekStart && date <= weekEnd
-            ) ?? false
-        );
+      if (view === "trash") {
+        result = result.filter((s) => s.isDeleted);
+      } else {
+        result = result.filter((s) => !s.isDeleted);
       }
-    }
 
-    return result;
-  }, [
-    normalizedStories,
-    selectedEpicId,
-    activeView,
-    doneStatus,
-    showDueTodayOnly,
-    showDueThisWeekOnly,
-    searchQuery,
-    yearlyStories,
-    regularStories,
-  ]);
+      if (selectedEpicId && !["completed", "trash"].includes(view)) {
+        result = result.filter((s) => s.epicId === selectedEpicId);
+      }
+      if (view === "search" && searchQuery.trim()) {
+        const term = searchQuery.trim().toLowerCase();
+        result = result.filter((story) => {
+          const content = [
+            story.title,
+            story.description,
+            ...(story.comments?.map((comment) => comment.text) ?? []),
+          ]
+            .filter(Boolean)
+            .map((entry) =>
+              String(entry)
+                .replace(/<[^>]+>/g, " ")
+                .toLowerCase()
+            );
+          return content.some((entry) => entry.includes(term));
+        });
+      }
+      if (view === "week") {
+        if (showDueTodayOnly) {
+          const today = new Date();
+          result = result.filter(
+            (story) =>
+              story.dueDates?.some((date) => isSameDay(date, today)) ?? false
+          );
+        } else if (showDueThisWeekOnly) {
+          const today = new Date();
+          const weekStart = startOfWeek(today, { weekStartsOn: 0 });
+          const weekEnd = endOfWeek(today, { weekStartsOn: 0 });
+          result = result.filter(
+            (story) =>
+              story.dueDates?.some(
+                (date) => date >= weekStart && date <= weekEnd
+              ) ?? false
+          );
+        }
+      }
+
+      return result;
+    },
+    [
+      normalizedStories,
+      selectedEpicId,
+      showDueTodayOnly,
+      showDueThisWeekOnly,
+      searchQuery,
+      yearlyStories,
+      regularStories,
+    ]
+  );
+
+  const filteredStories = useMemo(
+    () => buildFilteredStories(activeView),
+    [buildFilteredStories, activeView]
+  );
+
+  const modalFilteredStories = useMemo(
+    () => buildFilteredStories(modalActiveView),
+    [buildFilteredStories, modalActiveView]
+  );
 
   const storyCounts = useMemo(() => {
     const source = activeView === "yearly" ? yearlyStories : regularStories;
@@ -374,6 +389,17 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       });
     return counts;
   }, [activeView, regularStories, yearlyStories]);
+
+  const modalStoryCounts = useMemo(() => {
+    const source = modalActiveView === "yearly" ? yearlyStories : regularStories;
+    const counts: Record<string, number> = {};
+    source
+      .filter((s) => !s.isDeleted)
+      .forEach((story) => {
+        counts[story.epicId] = (counts[story.epicId] || 0) + 1;
+      });
+    return counts;
+  }, [modalActiveView, regularStories, yearlyStories]);
 
 
   const activeEpics = useMemo(() => epics.filter((epic) => !epic.isArchived), [epics]);
@@ -688,6 +714,15 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
 
   const isCalendarView = activeView === "today";
   const dateMode = activeView === "yearly" ? "month" : "day";
+  const modalDateMode = modalActiveView === "yearly" ? "month" : "day";
+  const modalViewTitle =
+    modalActiveView === "trash"
+      ? "Trash"
+      : modalActiveView === "yearly"
+      ? "Yearly Inbox"
+      : modalActiveView === "search"
+      ? "Search"
+      : "Inbox";
   const sidebarActiveView = useMemo(() => {
     if (["epics", "trash"].includes(activeView)) return "week";
     return activeView;
@@ -915,6 +950,18 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         onRefresh={handleRefresh}
         user={user}
       />
+      <button
+        type="button"
+        className="fixed right-6 top-4 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-panel-border bg-card/90 text-foreground shadow-sm transition hover:bg-card"
+        onClick={() => {
+          setIsInboxModalOpen(true);
+          setModalActiveView("week");
+        }}
+        title="Open inbox"
+        aria-label="Open inbox"
+      >
+        <Inbox className="h-5 w-5" />
+      </button>
 
       {requiresStorageSetup ? (
         <div className="flex-1 bg-background flex flex-col h-full min-w-0">
@@ -1577,6 +1624,114 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
           </div>
         </div>
       )}
+
+      <Dialog
+        open={isInboxModalOpen}
+        onOpenChange={(open) => {
+          setIsInboxModalOpen(open);
+          if (open) setModalActiveView("week");
+        }}
+      >
+        <DialogContent className="max-w-[98vw] h-[90vh] w-[1700px] overflow-hidden p-0">
+          <div className="flex h-full min-h-0">
+            <div className="shrink-0">
+              <ListSidebar
+                epics={activeEpics}
+                selectedEpicId={selectedEpicId}
+                onSelectEpic={handleSelectEpic}
+                onCreateEpic={() => setIsCreateEpicOpen(true)}
+                storyCounts={modalStoryCounts}
+                activeView={modalActiveView}
+                onViewChange={setModalActiveView}
+                width={clampPaneWidth(epicsPaneWidth)}
+                onRenameEpic={handleRenameEpicFromSidebar}
+                onDeleteEpic={handleArchiveEpic}
+              />
+            </div>
+            <div className="shrink-0" style={{ width: modalListWidth }}>
+              <StoryList
+                stories={modalFilteredStories}
+                epics={epics}
+                statusOptions={statusOptions}
+                doneStatus={doneStatus}
+                defaultStatus={defaultStatus}
+                selectedStoryId={selectedStoryId}
+                onSelectStory={setSelectedStoryId}
+                onCreateStory={handleQuickAddStory}
+                onUpdateStory={handleUpdateStory}
+                onDeleteStory={handleDeleteStory}
+                onRestoreStory={handleRestoreStory}
+                onPermanentDelete={handlePermanentDelete}
+                onEmptyTrash={handleEmptyTrash}
+                viewTitle={modalViewTitle}
+                activeView={modalActiveView}
+                dateMode={modalDateMode}
+                showDueTodayToggle={modalActiveView === "week"}
+                isDueTodayActive={showDueTodayOnly}
+                onToggleDueToday={() => {
+                  setShowDueTodayOnly((prev) => {
+                    const next = !prev;
+                    if (next) setShowDueThisWeekOnly(false);
+                    return next;
+                  });
+                }}
+                showDueWeekToggle={modalActiveView === "week"}
+                isDueWeekActive={showDueThisWeekOnly}
+                onToggleDueWeek={() => {
+                  setShowDueThisWeekOnly((prev) => {
+                    const next = !prev;
+                    if (next) setShowDueTodayOnly(false);
+                    return next;
+                  });
+                }}
+                onClearDueFilters={() => {
+                  setShowDueTodayOnly(false);
+                  setShowDueThisWeekOnly(false);
+                }}
+                canRenameEpic={
+                  Boolean(selectedEpicId) &&
+                  selectedEpicId !== "no-epic-assigned" &&
+                  selectedEpicId !== "week" &&
+                  modalActiveView === "week"
+                }
+                onRenameEpic={handleRenameEpicFromList}
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                onCompletedDateChange={(storyId, completedAt) => {
+                  const target = stories.find((s) => s.id === storyId);
+                  if (!target) return;
+                  handleUpdateStory({ ...target, completedAt });
+                }}
+              />
+            </div>
+            <div className="flex h-full min-w-0 flex-1 border-l border-panel-border bg-card">
+              {selectedStory ? (
+                <StoryDetail
+                  story={selectedStory}
+                  epic={epics.find((e) => e.id === selectedStory.epicId)}
+                  epics={epics}
+                  statusOptions={statusOptions}
+                  doneStatus={doneStatus}
+                  defaultStatus={defaultStatus}
+                  dateMode={modalDateMode}
+                  typeOfWorkOptions={typeOfWorkOptions}
+                  onAddTypeOfWork={handleAddTypeOfWork}
+                  onUpdateStory={handleUpdateStory}
+                  onOpenMeetings={() => setActiveView("oneonone")}
+                  onDeleteStory={handleDeleteStory}
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center">
+                  <EmptyState
+                    title="No story selected"
+                    description="Select a story to view details"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <CreateEpicDialog
         open={isCreateEpicOpen}

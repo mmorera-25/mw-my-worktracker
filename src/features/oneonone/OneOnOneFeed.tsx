@@ -947,47 +947,6 @@ const OneOnOneFeed = ({
               </Card>
             ) : null}
 
-            {editingNoteDate ? (
-              <>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-text-primary">To discuss</p>
-                    <span className="text-xs text-text-secondary">
-                      {meetingStories.length} Stories
-                    </span>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                    {meetingEpicIds.map((epicId) => {
-                      const epic = epics.find((entry) => entry.id === epicId)
-                      if (!epic) return null
-                      const count = meetingStories.filter(
-                        (story) => story.epicId === epic.id,
-                      ).length
-                      return (
-                        <Card
-                          key={epic.id}
-                          className="cursor-pointer rounded-2xl border border-border bg-surface/70 p-4 text-text-primary transition hover:border-accent/80 hover:bg-surface/90"
-                          onClick={() => setActiveEpicId(epic.id)}
-                        >
-                          <p className="text-lg font-semibold text-text-primary">{epic.name}</p>
-                          <p className="text-sm uppercase text-text-secondary mt-1">
-                            {epic.key}
-                          </p>
-                          <p className="text-[0.65rem] uppercase text-text-secondary mt-2">
-                            {count} stories
-                          </p>
-                        </Card>
-                      )
-                    })}
-                    {meetingEpicIds.length === 0 ? (
-                      <Card className="p-6 text-text-secondary">
-                        No epics selected yet.
-                      </Card>
-                    ) : null}
-                  </div>
-                </div>
-              </>
-            ) : null}
           </div>
       ) : (
         <Card className="p-6 text-text-secondary">
