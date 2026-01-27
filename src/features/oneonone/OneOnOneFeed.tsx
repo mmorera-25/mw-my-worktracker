@@ -4,9 +4,7 @@ import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
-import Dialog from '../../components/ui/Dialog'
 import RichTextEditor from '../../components/ui/RichTextEditor'
-import { StoryDetail } from '@inbox/components/StoryDetail'
 import type { Epic, Story, StoryComment } from '@inbox/types'
 import { cn } from '@inbox/lib/utils'
 import { loadDb, persistDb } from '../../lib/storage/dbManager'
@@ -78,7 +76,7 @@ const isStoryDone = (story: Story, doneStatusNormalized: string) => {
   return false
 }
 
-const BASE_STATUSES = ['Backlog', 'Scheduled', 'To Ask', 'To Do', 'Done']
+const BASE_STATUSES = ['Backlog', 'Scheduled', 'New', 'To Ask', 'To Do', 'Done']
 
 const OneOnOneFeed = ({
   userFirstName,
@@ -102,10 +100,6 @@ const OneOnOneFeed = ({
   const [editingNoteParticipants, setEditingNoteParticipants] = useState<string[]>([])
   const [editingNoteParticipantInput, setEditingNoteParticipantInput] = useState('')
   const [isParticipantsInputOpen, setIsParticipantsInputOpen] = useState(false)
-  const [isEpicPickerOpen, setIsEpicPickerOpen] = useState(false)
-  const [epicPickerSelection, setEpicPickerSelection] = useState<string[]>([])
-  const [activeEpicId, setActiveEpicId] = useState<string | null>(null)
-  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -199,19 +193,12 @@ const OneOnOneFeed = ({
   )
 
   const defaultStatus = useMemo(() => {
+    if (statusOptions.includes('New')) return 'New'
     const firstNonDone = statusOptions.find(
       (status) => normalizeStatus(status) !== 'done',
     )
     return firstNonDone ?? doneStatus
   }, [statusOptions, doneStatus])
-
-  const getNewStoryStatus = () => {
-    const firstNonDone = statusOptions.find(
-      (status) => normalizeStatus(status) !== doneStatusNormalized,
-    )
-    if (firstNonDone) return firstNonDone
-    return 'To Do'
-  }
 
   const activeParticipant = useMemo(
     () => participants.find((participant) => participant.id === activeTabId) ?? null,
@@ -256,38 +243,6 @@ const OneOnOneFeed = ({
       participant.id === participantId ? { ...participant, ...updates } : participant,
     )
     await persistParticipants(next)
-  }
-
-  const updateMeetingSelection = async (nextSelected: string[]) => {
-    setEditingMeetingSelectedEpicIds(nextSelected)
-    if (!activeParticipant || !editingNoteId) return
-    const nextParticipants = participants.map((participant) => {
-      if (participant.id !== activeParticipant.id) return participant
-      const notes = participant.meetingNotes ?? []
-      return {
-        ...participant,
-        meetingNotes: notes.map((note) =>
-          note.id === editingNoteId
-            ? {
-                ...note,
-                selectedEpicIds: nextSelected,
-              }
-            : note,
-        ),
-      }
-    })
-    await persistParticipants(nextParticipants)
-  }
-
-  const handleOpenEpicPicker = () => {
-    setEpicPickerSelection(editingMeetingSelectedEpicIds)
-    setIsEpicPickerOpen(true)
-  }
-
-  const handleSaveEpicPicker = async () => {
-    const nextSelected = epicPickerSelection
-    await updateMeetingSelection(nextSelected)
-    setIsEpicPickerOpen(false)
   }
 
   const handleAddParticipant = async () => {
@@ -452,41 +407,6 @@ const OneOnOneFeed = ({
     await persistTypeOfWorkOptions([...typeOfWorkOptions, trimmed])
   }
 
-  const handleDeleteStory = async (storyId: string) => {
-    const deletedAt = new Date()
-    const nextStories = stories.map((story) =>
-      story.id === storyId ? { ...story, isDeleted: true, deletedAt } : story,
-    )
-    await persistStories(nextStories)
-    if (selectedStoryId === storyId) {
-      setSelectedStoryId(null)
-    }
-  }
-
-  const handleAddStoryForEpic = async () => {
-    if (!activeEpic) return
-    const now = new Date()
-    const count = stories.filter((story) => story.epicId === activeEpic.id).length
-    const status = getNewStoryStatus()
-    const nextStory: Story = {
-      id: crypto.randomUUID(),
-      key: `${activeEpic.key}-${count + 1}`,
-      title: 'New Story',
-      description: '',
-      epicId: activeEpic.id,
-      dueDates: [],
-      status,
-      priority: 'low',
-      createdAt: now,
-      discussed: false,
-      isDeleted: false,
-      comments: [],
-    }
-    const nextStories = [nextStory, ...stories]
-    await persistStories(nextStories)
-    setSelectedStoryId(nextStory.id)
-  }
-
   const addMeetingParticipantName = () => {
     const trimmed = editingNoteParticipantInput.trim()
     if (!trimmed) return
@@ -516,29 +436,6 @@ const OneOnOneFeed = ({
     await persistStories(nextStories)
   }
 
-  const activeEpic = useMemo(
-    () => epics.find((epic) => epic.id === activeEpicId) ?? null,
-    [activeEpicId, epics],
-  )
-  const selectedStory = useMemo(
-    () => stories.find((story) => story.id === selectedStoryId) ?? null,
-    [stories, selectedStoryId],
-  )
-  const selectedStoryEpic = useMemo(
-    () =>
-      selectedStory ? epics.find((epic) => epic.id === selectedStory.epicId) ?? null : null,
-    [epics, selectedStory],
-  )
-  const activeEpicStories = useMemo(
-    () =>
-      stories.filter(
-        (story) =>
-          story.epicId === activeEpicId &&
-          !story.isDeleted &&
-          !isStoryDone(story, doneStatusNormalized),
-      ),
-    [stories, activeEpicId, doneStatusNormalized],
-  )
   const nonArchivedEpics = useMemo(() => {
     return epics.filter(
       (epic) =>
@@ -933,20 +830,6 @@ const OneOnOneFeed = ({
               )}
             </Card>
 
-            {editingNoteDate && activeParticipant.role !== 'management' ? (
-              <Card className="p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-text-primary">Epics to discuss</p>
-                  <span className="text-xs text-text-secondary">
-                    {editingMeetingSelectedEpicIds.length} selected
-                  </span>
-                </div>
-                <Button size="sm" variant="ghost" onClick={handleOpenEpicPicker}>
-                  Add Epics to today&apos;s meeting
-                </Button>
-              </Card>
-            ) : null}
-
           </div>
       ) : (
         <Card className="p-6 text-text-secondary">
@@ -955,164 +838,6 @@ const OneOnOneFeed = ({
       )}
     </div>
 
-      <Dialog
-        open={isEpicPickerOpen}
-        onClose={() => setIsEpicPickerOpen(false)}
-        title="Add epics to today's meeting"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-text-secondary">
-            Select the epics you want to cover in this meeting.
-          </p>
-          <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
-            {nonArchivedEpics.length === 0 ? (
-              <p className="text-sm text-text-secondary">No epics available.</p>
-            ) : (
-              nonArchivedEpics.map((epic) => (
-                <label
-                  key={epic.id}
-                  className="flex items-start gap-2 rounded-xl border border-border bg-surface-2 px-3 py-2 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    checked={epicPickerSelection.includes(epic.id)}
-                    onChange={() => {
-                      setEpicPickerSelection((prev) => {
-                        const set = new Set(prev)
-                        if (set.has(epic.id)) {
-                          set.delete(epic.id)
-                        } else {
-                          set.add(epic.id)
-                        }
-                        return Array.from(set)
-                      })
-                    }}
-                  />
-                  <span className="flex-1">
-                    <span className="block font-semibold text-text-primary">
-                      {epic.name}
-                    </span>
-                    <span className="block text-xs uppercase text-text-secondary">
-                      {epic.key}
-                    </span>
-                  </span>
-                </label>
-              ))
-            )}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setIsEpicPickerOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveEpicPicker}>Save selection</Button>
-          </div>
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(activeEpic)}
-        onClose={() => setActiveEpicId(null)}
-        title={activeEpic ? `Epic: ${activeEpic.name}` : undefined}
-        contentClassName="max-w-3xl"
-      >
-        {activeEpic ? (
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3 text-sm text-text-secondary">
-              <div>
-                <p className="text-xs uppercase">Created</p>
-                <p>{new Date(activeEpic.createdAt).toLocaleDateString()}</p>
-              </div>
-              <div>
-                <p className="text-xs uppercase">Key</p>
-                <p>{activeEpic.key}</p>
-              </div>
-              <div>
-                <p className="text-xs uppercase">Stories</p>
-                <p>{activeEpicStories.length}</p>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-text-secondary">Description</p>
-              <p className="text-text-primary whitespace-pre-wrap">
-                {activeEpic.description || 'No description provided.'}
-              </p>
-            </div>
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-text-primary">Stories</p>
-              {activeEpicStories.length === 0 ? (
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-text-secondary">No stories yet.</p>
-                  <Button size="sm" onClick={handleAddStoryForEpic}>
-                    Add story
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-text-secondary">
-                      {activeEpicStories.length} open stor{activeEpicStories.length === 1 ? 'y' : 'ies'}
-                    </p>
-                    <Button size="sm" onClick={handleAddStoryForEpic}>
-                      Add story
-                    </Button>
-                  </div>
-                  <ol className="space-y-2">
-                    {activeEpicStories.map((story, index) => {
-                      const dueDate = getEffectiveDueDate(story)
-                      return (
-                        <li
-                          key={story.id}
-                          className="rounded-lg border border-border bg-surface-2 px-3 py-2 text-sm"
-                        >
-                          <button
-                            className="grid w-full items-center gap-3 text-left transition hover:text-accent"
-                            style={{ gridTemplateColumns: 'minmax(0, 1fr) 25%' }}
-                            onClick={() => setSelectedStoryId(story.id)}
-                          >
-                            <span className="flex items-center gap-2">
-                              <span className="text-xs font-semibold text-text-secondary">
-                                {index + 1}.
-                              </span>
-                              <span className="font-semibold underline underline-offset-2">
-                                {story.title || 'Untitled story'}
-                              </span>
-                            </span>
-                            <span className="text-xs text-text-secondary text-right">
-                              Due: {dueDate ? dueDate.toLocaleDateString() : '—'}
-                            </span>
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ol>
-                </>
-              )}
-            </div>
-          </div>
-        ) : null}
-      </Dialog>
-
-      <Dialog
-        open={Boolean(selectedStory)}
-        onClose={() => setSelectedStoryId(null)}
-        title={selectedStory ? selectedStory.title : undefined}
-        contentClassName="max-w-[95vw] w-[92vw] h-[85vh] min-h-[520px] min-w-[720px] resize overflow-auto"
-      >
-        {selectedStory ? (
-          <StoryDetail
-            story={selectedStory}
-            epic={selectedStoryEpic ?? undefined}
-            epics={epics}
-            statusOptions={statusOptions}
-            doneStatus={doneStatus}
-            defaultStatus={defaultStatus}
-            typeOfWorkOptions={typeOfWorkOptions}
-            onAddTypeOfWork={handleAddTypeOfWork}
-            onUpdateStory={handleUpdateStory}
-            onDeleteStory={handleDeleteStory}
-          />
-        ) : null}
-      </Dialog>
     </>
   )
 }

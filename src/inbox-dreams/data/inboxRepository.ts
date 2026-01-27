@@ -88,7 +88,7 @@ const deserializeStory = (raw: Partial<Story>): Story => ({
     ? raw.dueDates.map((date) => toDate(date))
     : [toDate(raw.createdAt)],
   assignee: raw.assignee,
-  status: raw.status || "Backlog",
+  status: raw.status || "New",
   priority: (raw.priority as Story["priority"]) || "medium",
   createdAt: toDate(raw.createdAt),
   discussed: Boolean(raw.discussed),
@@ -121,9 +121,24 @@ export const loadInboxState = (db: Database): InboxState => {
   }
   const rawEpics = Array.isArray(stored.epics) ? stored.epics : [];
   const rawStories = Array.isArray(stored.stories) ? stored.stories : [];
+  const epics = rawEpics.map((epic) => deserializeEpic(epic));
+  const stories = rawStories.map((story) => deserializeStory(story));
+  const cutoff = Date.now() - 10 * 24 * 60 * 60 * 1000;
+  const prunedStories = stories.filter((story) => {
+    if (!story.isDeleted) return true;
+    if (!story.deletedAt) return true;
+    return story.deletedAt.getTime() >= cutoff;
+  });
+  if (prunedStories.length !== stories.length) {
+    setJson(db, "inbox_state", {
+      epics: epics.map((epic) => serializeEpic(epic)),
+      stories: prunedStories.map((story) => serializeStory(story)),
+      preferences: stored.preferences ?? {},
+    });
+  }
   return {
-    epics: rawEpics.map((epic) => deserializeEpic(epic)),
-    stories: rawStories.map((story) => deserializeStory(story)),
+    epics,
+    stories: prunedStories,
     preferences: stored.preferences ?? {},
   };
 };

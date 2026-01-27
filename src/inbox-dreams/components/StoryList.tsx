@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { isToday } from "date-fns";
-import { ChevronDown, ChevronRight, Plus, MoreVertical, Trash2, RotateCcw, ListTodo, Inbox, CheckCircle, CalendarCheck, XCircle, HelpCircle, Pencil, Search, PauseCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, MoreVertical, Trash2, RotateCcw, ListTodo, Inbox, CheckCircle, CalendarCheck, XCircle, HelpCircle, Pencil, Search, PauseCircle, Sparkles } from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { StoryListItem } from "./StoryListItem";
 import { Input } from "@inbox/components/ui/input";
@@ -78,6 +78,7 @@ function StatusGroup({
   const iconMap: Record<string, React.ReactNode> = {
     Scheduled: <CalendarCheck className="w-4 h-4 text-muted-foreground" />,
     "On Hold / Waiting": <PauseCircle className="w-4 h-4 text-muted-foreground" />,
+    New: <Sparkles className="w-4 h-4 text-muted-foreground" />,
     "To Ask": <HelpCircle className="w-4 h-4 text-muted-foreground" />,
     "To Do": <ListTodo className="w-4 h-4 text-muted-foreground" />,
     Backlog: <Inbox className="w-4 h-4 text-muted-foreground" />,
@@ -196,7 +197,15 @@ export function StoryList({
   const isSearchView = activeView === "search";
 
   const groupedStories = useMemo(() => {
-    const orderedStatuses = ["On Hold / Waiting", "To Ask", "To Do", "Scheduled", "Backlog", "Done"];
+    const orderedStatuses = [
+      "On Hold / Waiting",
+      "New",
+      "To Ask",
+      "To Do",
+      "Scheduled",
+      "Backlog",
+      "Done",
+    ];
     const remaining = statusOptions.filter((status) => !orderedStatuses.includes(status));
     const groups = [...orderedStatuses, ...remaining].map((status) => ({
       status,

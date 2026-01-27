@@ -6,7 +6,6 @@ import { StoryList } from "@inbox/components/StoryList";
 import { StoryDetail } from "@inbox/components/StoryDetail";
 import { EmptyState } from "@inbox/components/EmptyState";
 import { CreateEpicDialog } from "@inbox/components/CreateEpicDialog";
-import { CreateStoryDialog } from "@inbox/components/CreateStoryDialog";
 import { Dialog, DialogContent } from "@inbox/components/ui/dialog";
 import type { Epic, Story } from "@inbox/types";
 import DataStoragePanel from "../features/settings/DataStoragePanel";
@@ -28,7 +27,7 @@ import {
   startOfMonth,
   startOfWeek,
 } from "date-fns";
-import { Archive, ArrowLeft, Inbox } from "lucide-react";
+import { Archive, ArrowLeft, Inbox, Trash2, RotateCcw } from "lucide-react";
 
 type InboxDreamsShellProps = {
   user: FirebaseUser;
@@ -129,18 +128,15 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   const [isCreateEpicOpen, setIsCreateEpicOpen] = useState(false);
   const [isEditEpicOpen, setIsEditEpicOpen] = useState(false);
   const [editingEpic, setEditingEpic] = useState<Epic | null>(null);
-  const [isCreateStoryOpen, setIsCreateStoryOpen] = useState(false);
-  const [pendingStoryAfterEpic, setPendingStoryAfterEpic] = useState(false);
   const [isInboxModalOpen, setIsInboxModalOpen] = useState(false);
   const [modalActiveView, setModalActiveView] = useState("week");
   const [focusedOkr, setFocusedOkr] = useState<string | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowConfig>({
-    columns: ["Backlog", "Scheduled", "On Hold / Waiting", "To Ask", "To Do", "Done"],
+    columns: ["Backlog", "Scheduled", "On Hold / Waiting", "New", "To Ask", "To Do", "Done"],
     swimlanes: ["Core", "Enablement", "Bugs"],
     accent: "indigo",
   });
   const [calendarMonth, setCalendarMonth] = useState(new Date());
-  const [pendingStoryTitle, setPendingStoryTitle] = useState("");
   const [editingField, setEditingField] = useState<{
     id: string;
     field: "name" | "key" | "description";
@@ -226,10 +222,10 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     }
     return "Done";
   }, [workflow.columns]);
-  const defaultStatus = useMemo(
-    () => workflow.columns[0] ?? "Backlog",
-    [workflow.columns]
-  );
+  const defaultStatus = useMemo(() => {
+    if (workflow.columns.includes("New")) return "New";
+    return workflow.columns[0] ?? "Backlog";
+  }, [workflow.columns]);
   const statusOptions = useMemo(
     () => workflow.columns.filter((column) => column !== "Doing"),
     [workflow.columns]
@@ -404,6 +400,16 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
 
   const activeEpics = useMemo(() => epics.filter((epic) => !epic.isArchived), [epics]);
   const archivedEpics = useMemo(() => epics.filter((epic) => epic.isArchived), [epics]);
+  const adminEpics = useMemo(() => {
+    const source = showArchived ? archivedEpics : activeEpics;
+    return source.slice().sort((a, b) => {
+      const aSystem = a.id === NO_EPIC_ID || a.name === NO_EPIC_NAME;
+      const bSystem = b.id === NO_EPIC_ID || b.name === NO_EPIC_NAME;
+      if (aSystem && !bSystem) return -1;
+      if (!aSystem && bSystem) return 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
+  }, [showArchived, archivedEpics, activeEpics]);
 
   useEffect(() => {
     const normalized = ensureNoEpicAssigned(epics, stories);
@@ -492,16 +498,13 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       };
       setEpics((prev) => [...prev, newEpic]);
       setSelectedEpicId(newEpic.id);
-      if (pendingStoryAfterEpic) {
-        setIsCreateStoryOpen(true);
-        setPendingStoryAfterEpic(false);
-      }
     },
-    [pendingStoryAfterEpic]
+    []
   );
 
   const handleArchiveEpic = useCallback(
     (epicId: string) => {
+      if (epicId === NO_EPIC_ID) return;
       setEpics((prev) =>
         prev.map((epic) =>
           epic.id === epicId ? { ...epic, isArchived: true } : epic
@@ -512,6 +515,26 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       }
     },
     [selectedEpicId]
+  );
+
+  const handleDeleteEpic = useCallback(
+    (epicId: string) => {
+      if (epicId === NO_EPIC_ID) return;
+      const hasAssignedStories = stories.some(
+        (story) => story.epicId === epicId && !story.isDeleted
+      );
+      if (hasAssignedStories) {
+        window.alert(
+          "This epic still has stories. Reassign them to another epic before deleting."
+        );
+        return;
+      }
+      setEpics((prev) => prev.filter((epic) => epic.id !== epicId));
+      if (selectedEpicId === epicId) {
+        setSelectedEpicId(null);
+      }
+    },
+    [stories, selectedEpicId]
   );
 
   const handleRenameEpicFromSidebar = useCallback(
@@ -534,6 +557,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   }, []);
 
   const startEditField = useCallback((epic: Epic, field: "name" | "key" | "description") => {
+    if (epic.id === NO_EPIC_ID || epic.name === NO_EPIC_NAME) return;
     setEditingField({ id: epic.id, field });
     if (field === "name") setEditValue(epic.name);
     if (field === "key") setEditValue(epic.key);
@@ -596,11 +620,39 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   );
 
   const handleQuickAddStory = useCallback(
-    (title: string) => {
-      setPendingStoryTitle(title);
-      setIsCreateStoryOpen(true);
+    (title: string, view: string = activeView) => {
+      const trimmedTitle = title.trim();
+      if (!trimmedTitle) return;
+      const availableEpics = epics.filter((epic) => !epic.isArchived);
+      const noEpicId =
+        availableEpics.find(
+          (epic) =>
+            epic.id === "no-epic-assigned" ||
+            epic.name.toLowerCase() === "no epic assigned"
+        )?.id ?? "";
+      const defaultEpicId =
+        availableEpics.find((epic) => epic.id === selectedEpicId)?.id ??
+        noEpicId ??
+        availableEpics[0]?.id ??
+        "";
+      if (!defaultEpicId) return;
+      const isYearly = view === "yearly";
+      const nextStatus = "New";
+      const dueDates = isYearly
+        ? [new Date(`${format(new Date(), "yyyy-MM")}-01T00:00:00`)]
+        : [new Date()];
+      handleCreateStory({
+        title: trimmedTitle,
+        description: "",
+        epicId: defaultEpicId,
+        dueDates,
+        status: nextStatus,
+        priority: "low",
+        isYearly,
+        typeOfWork: "",
+      });
     },
-    []
+    [activeView, epics, selectedEpicId, statusOptions, defaultStatus, handleCreateStory]
   );
 
   const handleUpdateStory = useCallback((updatedStory: Story) => {
@@ -1246,7 +1298,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 <p className="text-sm text-muted-foreground">Manage</p>
                 <h2 className="text-xl font-semibold text-foreground">Epics</h2>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 pr-16">
                 <button
                   type="button"
                   className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
@@ -1283,7 +1335,10 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 <span className="text-right">Actions</span>
               </div>
               <div className="divide-y divide-panel-border">
-                {activeEpics.map((epic) => (
+                {adminEpics.map((epic) => {
+                  const isSystemEpic =
+                    epic.id === NO_EPIC_ID || epic.name === NO_EPIC_NAME;
+                  return (
                   <div
                     key={epic.id}
                     className="grid grid-cols-[1.2fr,0.6fr,2fr,0.5fr,0.5fr] gap-3 px-4 py-3 text-sm"
@@ -1291,9 +1346,12 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                     <div className="flex items-center gap-2 text-foreground">
                       <button
                         type="button"
-                        className="h-2.5 w-2.5 rounded-full"
+                        className={`h-2.5 w-2.5 rounded-full ${
+                          isSystemEpic ? "opacity-60 cursor-default" : ""
+                        }`}
                         style={{ backgroundColor: epic.color }}
                         onClick={() => {
+                          if (isSystemEpic) return;
                           setEditingEpic(epic);
                           setIsEditEpicOpen(true);
                         }}
@@ -1318,6 +1376,10 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                           placeholder="Epic name"
                           autoFocus
                         />
+                      ) : isSystemEpic ? (
+                        <span className="font-medium text-muted-foreground">
+                          {epic.name}
+                        </span>
                       ) : (
                         <button
                           type="button"
@@ -1353,6 +1415,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                         maxLength={3}
                         autoFocus
                       />
+                    ) : isSystemEpic ? (
+                      <span className="text-left text-muted-foreground">{epic.key}</span>
                     ) : (
                       <button
                         type="button"
@@ -1378,6 +1442,10 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                         rows={2}
                         autoFocus
                       />
+                    ) : isSystemEpic ? (
+                      <span className="text-left text-muted-foreground line-clamp-2">
+                        {epic.description || "—"}
+                      </span>
                     ) : (
                       <button
                         type="button"
@@ -1391,66 +1459,49 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                       {storyCounts[epic.id] || 0}
                     </span>
                     <div className="flex items-center justify-end">
-                      <button
-                        type="button"
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-hover-overlay hover:text-foreground"
-                        onClick={() => handleArchiveEpic(epic.id)}
-                        title="Archive epic"
-                      >
-                        <Archive className="h-4 w-4" />
-                      </button>
+                      {!epic.isArchived && !isSystemEpic && (
+                        <button
+                          type="button"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-hover-overlay hover:text-foreground"
+                          onClick={() => handleArchiveEpic(epic.id)}
+                          title="Archive epic"
+                        >
+                          <Archive className="h-4 w-4" />
+                        </button>
+                      )}
+                      {epic.isArchived && !isSystemEpic && (
+                        <button
+                          type="button"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-hover-overlay hover:text-foreground"
+                          onClick={() => handleRestoreEpic(epic.id)}
+                          title="Restore epic"
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </button>
+                      )}
+                      {!isSystemEpic && (
+                        <button
+                          type="button"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-hover-overlay hover:text-foreground"
+                          onClick={() => handleDeleteEpic(epic.id)}
+                          title="Delete epic"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
-                ))}
-                {activeEpics.length === 0 && (
+                );
+                })}
+                {adminEpics.length === 0 && (
                   <div className="px-4 py-6 text-sm text-muted-foreground">
-                    No epics yet. Create your first epic to get started.
+                    {showArchived
+                      ? "No archived epics."
+                      : "No epics yet. Create your first epic to get started."}
                   </div>
                 )}
               </div>
             </div>
-            {showArchived && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between px-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <span>Archived epics</span>
-                  <span>{archivedEpics.length}</span>
-                </div>
-                <div className="space-y-2 rounded-lg border border-panel-border bg-card/80 p-3">
-                  {archivedEpics.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No archived epics.</p>
-                  ) : (
-                    archivedEpics.map((epic) => (
-                      <div
-                        key={epic.id}
-                        className="flex items-center justify-between gap-3 rounded-md border border-transparent px-3 py-2 text-sm text-foreground hover:border-panel-border hover:bg-hover-overlay"
-                      >
-                        <div>
-                          <p className="font-medium">{epic.name}</p>
-                          <p className="text-xs text-muted-foreground">{epic.key}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="inline-flex h-8 items-center gap-2 rounded-md border border-panel-border px-3 text-xs font-medium text-primary hover:bg-primary/10"
-                            onClick={() => handleRestoreEpic(epic.id)}
-                          >
-                            Restore
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-hover-overlay hover:text-foreground"
-                            onClick={() => handleArchiveEpic(epic.id)}
-                            title="Archive epic again"
-                          >
-                            <Archive className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         </div>
         ) : (
@@ -1463,7 +1514,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 title={isEpicsPaneCollapsed ? "Show epics list" : "Hide epics list"}
               >
                 <span className="inline-block rotate-180 [writing-mode:vertical-rl]">
-                  Epics List
+                  {isEpicsPaneCollapsed ? "Show epics list" : "Hide epics list"}
                 </span>
               </button>
               <div
@@ -1504,7 +1555,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 defaultStatus={defaultStatus}
                 selectedStoryId={selectedStoryId}
                 onSelectStory={setSelectedStoryId}
-                onCreateStory={handleQuickAddStory}
+                onCreateStory={(title) => handleQuickAddStory(title, activeView)}
                 onUpdateStory={handleUpdateStory}
                 onDeleteStory={handleDeleteStory}
                 onRestoreStory={handleRestoreStory}
@@ -1657,7 +1708,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 defaultStatus={defaultStatus}
                 selectedStoryId={selectedStoryId}
                 onSelectStory={setSelectedStoryId}
-                onCreateStory={handleQuickAddStory}
+                onCreateStory={(title) => handleQuickAddStory(title, modalActiveView)}
                 onUpdateStory={handleUpdateStory}
                 onDeleteStory={handleDeleteStory}
                 onRestoreStory={handleRestoreStory}
@@ -1737,9 +1788,6 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         open={isCreateEpicOpen}
         onOpenChange={(open) => {
           setIsCreateEpicOpen(open);
-          if (!open && pendingStoryAfterEpic) {
-            setPendingStoryAfterEpic(false);
-          }
         }}
         onCreateEpic={handleCreateEpic}
         usedColors={epics.map((epic) => epic.color)}
@@ -1757,28 +1805,6 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         mode="edit"
         initialEpic={editingEpic}
         onUpdateEpic={handleUpdateEpicColor}
-      />
-      <CreateStoryDialog
-        open={isCreateStoryOpen}
-        onOpenChange={(open) => {
-          setIsCreateStoryOpen(open);
-          if (!open) setPendingStoryTitle("");
-        }}
-        epics={activeEpics}
-        selectedEpicId={selectedEpicId || undefined}
-        initialTitle={pendingStoryTitle}
-        statusOptions={statusOptions}
-        defaultStatus={defaultStatus}
-        dateMode={dateMode}
-        isYearly={activeView === "yearly"}
-        typeOfWorkOptions={typeOfWorkOptions}
-        onAddTypeOfWork={handleAddTypeOfWork}
-        onRequestCreateEpic={() => {
-          setIsCreateStoryOpen(false);
-          setIsCreateEpicOpen(true);
-          setPendingStoryAfterEpic(true);
-        }}
-        onCreateStory={handleCreateStory}
       />
     </div>
   );

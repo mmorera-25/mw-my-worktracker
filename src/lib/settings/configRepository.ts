@@ -7,7 +7,7 @@ export type WorkflowConfig = {
 }
 
 const defaultConfig: WorkflowConfig = {
-  columns: ['Backlog', 'Scheduled', 'On Hold / Waiting', 'To Ask', 'To Do', 'Done'],
+  columns: ['Backlog', 'Scheduled', 'On Hold / Waiting', 'New', 'To Ask', 'To Do', 'Done'],
   swimlanes: ['Core', 'Enablement', 'Bugs'],
   accent: 'indigo',
 }
@@ -49,6 +49,18 @@ export const loadWorkflowConfig = (db: Database): WorkflowConfig => {
       'On Hold / Waiting',
       ...columns.filter((col: string) => !['Backlog', 'Scheduled'].includes(col)),
     ]
+  }
+  if (!new Set(columns).has('New')) {
+    const toAskIndex = columns.findIndex((col: string) => col === 'To Ask')
+    if (toAskIndex === -1) {
+      columns = ['New', ...columns]
+    } else {
+      columns = [
+        ...columns.slice(0, toAskIndex),
+        'New',
+        ...columns.slice(toAskIndex),
+      ]
+    }
   }
   if (columnsSet.has('Doing')) {
     columns = columns.filter((col: string) => col !== 'Doing')

@@ -67,7 +67,7 @@ export function ListSidebar({
   const orderedEpics = epics
     .filter((epic) => epic !== noEpic)
     .slice()
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
   return (
     <aside
@@ -80,6 +80,42 @@ export function ListSidebar({
         <div className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Epics
         </div>
+
+        {noEpic ? (
+          <div
+            key={noEpic.id}
+            className={cn(
+              "group flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-hover-overlay",
+              selectedEpicId === noEpic.id && "bg-selected-bg text-primary font-medium"
+            )}
+          >
+            <button
+              type="button"
+              className="flex flex-1 min-w-0 items-center gap-3 text-left"
+              onClick={() => onSelectEpic(noEpic.id)}
+            >
+              <span className="shrink-0 text-xs font-semibold uppercase text-muted-foreground">
+                N/A
+              </span>
+              <span className="flex-1 min-w-0 truncate text-muted-foreground">
+                {noEpic.name}
+              </span>
+              <span className="w-6 text-right text-xs text-muted-foreground tabular-nums">
+                {storyCounts[noEpic.id] || 0}
+              </span>
+            </button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="invisible h-6 w-6"
+              disabled
+              aria-hidden="true"
+              tabIndex={-1}
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : null}
 
         {/* Epic Items */}
         {orderedEpics.map((epic) => (
@@ -136,40 +172,6 @@ export function ListSidebar({
             </DropdownMenu>
           </div>
         ))}
-
-        {noEpic ? (
-          <div
-            key={noEpic.id}
-            className={cn(
-              "group flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-hover-overlay",
-              selectedEpicId === noEpic.id && "bg-selected-bg text-primary font-medium"
-            )}
-          >
-            <button
-              type="button"
-              className="flex flex-1 min-w-0 items-center gap-3 text-left"
-              onClick={() => onSelectEpic(noEpic.id)}
-            >
-              <span className="shrink-0 text-xs font-semibold uppercase text-muted-foreground">
-                N/A
-              </span>
-              <span className="flex-1 min-w-0 truncate">{noEpic.name}</span>
-              <span className="w-6 text-right text-xs text-muted-foreground tabular-nums">
-                {storyCounts[noEpic.id] || 0}
-              </span>
-            </button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="invisible h-6 w-6"
-              disabled
-              aria-hidden="true"
-              tabIndex={-1}
-            >
-              <MoreVertical className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        ) : null}
 
         <Button
           onClick={onCreateEpic}

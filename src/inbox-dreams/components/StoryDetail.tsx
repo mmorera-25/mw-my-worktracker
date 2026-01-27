@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Calendar,
   Pencil,
@@ -93,6 +93,33 @@ export function StoryDetail({
   typeOfWorkOptions = [],
   onAddTypeOfWork,
 }: StoryDetailProps) {
+  const orderedStatusOptions = useMemo(() => {
+    const ordered = [
+      "On Hold / Waiting",
+      "New",
+      "To Ask",
+      "To Do",
+      "Scheduled",
+      "Backlog",
+      "Done",
+    ];
+    const remaining = statusOptions.filter((status) => !ordered.includes(status));
+    return [
+      ...ordered.filter((status) => statusOptions.includes(status)),
+      ...remaining,
+    ];
+  }, [statusOptions]);
+  const sortedEpics = useMemo(
+    () => epics.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
+    [epics]
+  );
+  const sortedTypeOfWorkOptions = useMemo(
+    () =>
+      typeOfWorkOptions
+        .slice()
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    [typeOfWorkOptions]
+  );
   const [title, setTitle] = useState(story.title);
   const [description, setDescription] = useState(story.description);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -374,8 +401,13 @@ export function StoryDetail({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {statusOptions.map((status) => (
-                  <SelectItem key={status} value={status}>
+                {orderedStatusOptions.map((status) => (
+                  <SelectItem
+                    key={status}
+                    value={status}
+                    className={status === "New" ? "hidden" : undefined}
+                    disabled={status === "New"}
+                  >
                     {status}
                   </SelectItem>
                 ))}
@@ -410,7 +442,7 @@ export function StoryDetail({
                 <SelectValue placeholder="Epic" />
               </SelectTrigger>
               <SelectContent>
-                {epics.map((item) => (
+                {sortedEpics.map((item) => (
                   <SelectItem key={item.id} value={item.id}>
                     {item.name}
                   </SelectItem>
@@ -434,15 +466,15 @@ export function StoryDetail({
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
-              {typeOfWorkOptions.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {option}
-                </SelectItem>
-              ))}
-              <SelectItem value="__other__">Other...</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+                {sortedTypeOfWorkOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+                <SelectItem value="__other__">Other...</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1">
             <p className="text-[11px] uppercase text-muted-foreground">
               {isYearly ? "Due months" : "Due dates"}
