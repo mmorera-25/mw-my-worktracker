@@ -91,11 +91,16 @@ function StatusGroup({
     const upcoming = sorted.find((date) => date >= now);
     return upcoming ?? sorted[sorted.length - 1];
   };
+  const getSortDate = (story: Story) => {
+    const startDate = story.startDate ? new Date(story.startDate) : null;
+    if (startDate && !Number.isNaN(startDate.getTime())) return startDate;
+    return getEffectiveDueDate(story);
+  };
 
   const sortedStories = useMemo(() => {
     return stories.slice().sort((a, b) => {
-      const aDate = getEffectiveDueDate(a);
-      const bDate = getEffectiveDueDate(b);
+      const aDate = getSortDate(a);
+      const bDate = getSortDate(b);
       const aIsToday = isToday(aDate);
       const bIsToday = isToday(bDate);
       if (aIsToday && !bIsToday) return -1;

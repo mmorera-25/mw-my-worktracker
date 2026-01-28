@@ -9,6 +9,7 @@ export interface User {
 
 export interface Story {
   id: string;
+  storyCode?: string;
   key: string;
   title: string;
   description: string;

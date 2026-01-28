@@ -17,7 +17,13 @@ const get_json = (db: Database, key: string) => {
   stmt.bind([key])
   const value = stmt.step() ? (stmt.get()[0] as string) : null
   stmt.free()
-  return value ? JSON.parse(value) : null
+  if (!value) return null
+  try {
+    return JSON.parse(value)
+  } catch (error) {
+    console.error(`Failed to parse user_config key "${key}":`, error)
+    return null
+  }
 }
 
 const set_json = (db: Database, key: string, value: any) => {

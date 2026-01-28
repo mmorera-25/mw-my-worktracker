@@ -21,7 +21,13 @@ const getJson = (db: Database, key: string) => {
   stmt.bind([key]);
   const value = stmt.step() ? (stmt.get()[0] as string) : null;
   stmt.free();
-  return value ? JSON.parse(value) : null;
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    console.error(`Failed to parse user_config key "${key}":`, error);
+    return null;
+  }
 };
 
 const setJson = (db: Database, key: string, value: unknown) => {
@@ -31,6 +37,16 @@ const setJson = (db: Database, key: string, value: unknown) => {
   stmt.run([key, JSON.stringify(value)]);
   stmt.free();
 };
+
+const parseStoryCodeNumber = (value?: string) => {
+  if (!value) return null;
+  const match = /^ST-(\d+)$/.exec(value.trim());
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatStoryCode = (value: number) => `ST-${String(value).padStart(3, "0")}`;
 
 const toDate = (value: unknown, fallback = new Date()) => {
   if (value instanceof Date) return value;
@@ -60,9 +76,11 @@ const deserializeEpic = (raw: Partial<Epic>): Epic => ({
 
 const serializeStory = (story: Story) => ({
   ...story,
+  storyCode: story.storyCode,
   startDate: story.startDate ? story.startDate.toISOString() : undefined,
   dueDates: story.dueDates.map((date) => date.toISOString()),
   createdAt: story.createdAt.toISOString(),
+  isYearly: story.isYearly,
   deletedAt: story.deletedAt ? story.deletedAt.toISOString() : undefined,
   completedAt: story.completedAt ? story.completedAt.toISOString() : undefined,
   comments: story.comments?.map((comment) => ({
@@ -80,8 +98,13 @@ const serializeStory = (story: Story) => ({
 
 const deserializeStory = (raw: Partial<Story>): Story => {
   const rawDueDates = Array.isArray(raw.dueDates) ? raw.dueDates : null;
+  // If isYearly flag was missing in older saves, infer from empty due dates plus a start date.
+  const inferredYearly =
+    raw.isYearly ??
+    (rawDueDates && rawDueDates.length === 0 && Boolean(raw.startDate));
   return {
     id: raw.id || "",
+    storyCode: raw.storyCode,
     key: raw.key || "",
     title: raw.title || "Untitled story",
     description: raw.description || "",
@@ -96,7 +119,7 @@ const deserializeStory = (raw: Partial<Story>): Story => {
     priority: (raw.priority as Story["priority"]) || "medium",
     createdAt: toDate(raw.createdAt),
     discussed: Boolean(raw.discussed),
-    isYearly: Boolean(raw.isYearly),
+    isYearly: Boolean(inferredYearly),
     isDeleted: Boolean(raw.isDeleted),
     deletedAt: raw.deletedAt ? toDate(raw.deletedAt) : undefined,
     completedAt: raw.completedAt ? toDate(raw.completedAt) : undefined,
@@ -127,14 +150,40 @@ export const loadInboxState = (db: Database): InboxState => {
   const rawEpics = Array.isArray(stored.epics) ? stored.epics : [];
   const rawStories = Array.isArray(stored.stories) ? stored.stories : [];
   const epics = rawEpics.map((epic) => deserializeEpic(epic));
-  const stories = rawStories.map((story) => deserializeStory(story));
+  let didInferYearly = false;
+  const stories = rawStories.map((story) => {
+    const deserialized = deserializeStory(story);
+    if (!story.isYearly && deserialized.isYearly) {
+      didInferYearly = true;
+    }
+    return deserialized;
+  });
   const cutoff = Date.now() - 10 * 24 * 60 * 60 * 1000;
-  const prunedStories = stories.filter((story) => {
+  let prunedStories = stories.filter((story) => {
     if (!story.isDeleted) return true;
     if (!story.deletedAt) return true;
     return story.deletedAt.getTime() >= cutoff;
   });
-  if (prunedStories.length !== stories.length) {
+  const existingMax = prunedStories.reduce((max, story) => {
+    const value = parseStoryCodeNumber(story.storyCode);
+    return value && value > max ? value : max;
+  }, 0);
+  let nextCode = existingMax + 1;
+  let didAssignStoryCodes = false;
+  prunedStories = prunedStories.map((story) => {
+    if (story.storyCode) return story;
+    didAssignStoryCodes = true;
+    const storyCode = formatStoryCode(nextCode);
+    nextCode += 1;
+    return { ...story, storyCode };
+  });
+  if (prunedStories.length !== stories.length || didInferYearly) {
+    setJson(db, "inbox_state", {
+      epics: epics.map((epic) => serializeEpic(epic)),
+      stories: prunedStories.map((story) => serializeStory(story)),
+      preferences: stored.preferences ?? {},
+    });
+  } else if (didAssignStoryCodes) {
     setJson(db, "inbox_state", {
       epics: epics.map((epic) => serializeEpic(epic)),
       stories: prunedStories.map((story) => serializeStory(story)),

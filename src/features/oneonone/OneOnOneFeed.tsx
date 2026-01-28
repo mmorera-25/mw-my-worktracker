@@ -4,6 +4,7 @@ import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
+import Dialog from '../../components/ui/Dialog'
 import RichTextEditor from '../../components/ui/RichTextEditor'
 import type { Epic, Story, StoryComment } from '@inbox/types'
 import { cn } from '@inbox/lib/utils'
@@ -77,6 +78,24 @@ const isStoryDone = (story: Story, doneStatusNormalized: string) => {
 }
 
 const BASE_STATUSES = ['Backlog', 'Scheduled', 'New', 'To Ask', 'To Do', 'Done']
+type QuestionStorySnapshot = {
+  id: string
+  title: string
+  epicId: string
+}
+
+type QuestionDisplayItem = {
+  id: string
+  title: string
+  epicId?: string
+  story?: Story
+}
+
+const buildQuestionSnapshot = (story: Story): QuestionStorySnapshot => ({
+  id: story.id,
+  title: story.title || 'Untitled story',
+  epicId: story.epicId,
+})
 
 const OneOnOneFeed = ({
   userFirstName,
@@ -100,18 +119,16 @@ const OneOnOneFeed = ({
   const [editingNoteParticipants, setEditingNoteParticipants] = useState<string[]>([])
   const [editingNoteParticipantInput, setEditingNoteParticipantInput] = useState('')
   const [isParticipantsInputOpen, setIsParticipantsInputOpen] = useState(false)
+  const [isQuestionEpicDialogOpen, setIsQuestionEpicDialogOpen] = useState(false)
+  const [questionEpicId, setQuestionEpicId] = useState<string | null>(null)
+  const [questionEpicSelection, setQuestionEpicSelection] = useState<string>('')
+  const [showLiveQuestionList, setShowLiveQuestionList] = useState(true)
+  const [questionSelectionDirty, setQuestionSelectionDirty] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [savingNote, setSavingNote] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [typeOfWorkOptions, setTypeOfWorkOptions] = useState<string[]>([
-    'Configuration',
-    'Ask question in a Meeting',
-    'Document',
-    'Send Email',
-    'Aligment Required',
-    'Waiting for Answer',
-  ])
-
   useEffect(() => {
     const init = async () => {
       try {
@@ -119,9 +136,6 @@ const OneOnOneFeed = ({
         const inboxState = loadInboxState(ctx.db)
         setEpics(inboxState.epics)
         setStories(inboxState.stories)
-        if (Array.isArray(inboxState.preferences.typeOfWorkOptions)) {
-          setTypeOfWorkOptions(inboxState.preferences.typeOfWorkOptions)
-        }
         const storedParticipants = loadMeetingParticipants(ctx.db)
         setParticipants(storedParticipants)
         await persistDb(ctx)
@@ -144,10 +158,6 @@ const OneOnOneFeed = ({
       setActiveTabId(HOME_TAB_ID)
     }
   }, [participants, activeTabId])
-
-  useEffect(() => {
-    setActiveEpicId(null)
-  }, [activeTabId])
 
   const commentMap = useMemo(() => {
     const byStory: Record<string, StoryComment[]> = {}
@@ -214,25 +224,14 @@ const OneOnOneFeed = ({
     window.dispatchEvent(new Event('inbox-stories-updated'))
   }
 
-  const persistTypeOfWorkOptions = async (next: string[]) => {
-    setTypeOfWorkOptions(next)
-    const ctx = await loadDb()
-    const inboxState = loadInboxState(ctx.db)
-    saveInboxState(ctx.db, {
-      ...inboxState,
-      preferences: {
-        ...inboxState.preferences,
-        typeOfWorkOptions: next,
-      },
-    })
-    await persistDb(ctx)
-  }
-
   const persistParticipants = async (next: MeetingParticipant[]) => {
     setParticipants(next)
     const ctx = await loadDb()
     saveMeetingParticipants(ctx.db, next)
     await persistDb(ctx)
+    const refreshed = loadMeetingParticipants(ctx.db)
+    setParticipants(refreshed)
+    window.dispatchEvent(new Event('meeting-participants-updated'))
   }
 
   const handleUpdateParticipant = async (
@@ -277,6 +276,7 @@ const OneOnOneFeed = ({
     setEditingMeetingSelectedEpicIds(normalizedEpicIds)
     setEditingNoteParticipants(note.participants ?? [])
     setEditingNoteParticipantInput('')
+    setQuestionEpicId(note.questionEpicId ?? null)
   }
 
   const handleStartMeeting = async () => {
@@ -291,6 +291,9 @@ const OneOnOneFeed = ({
     setEditingNoteParticipants([])
     setEditingNoteParticipantInput('')
     setIsParticipantsInputOpen(false)
+    setQuestionEpicId(null)
+    setShowLiveQuestionList(true)
+    setQuestionSelectionDirty(false)
   }
 
   const handleCancelNoteEdit = () => {
@@ -302,6 +305,9 @@ const OneOnOneFeed = ({
     setEditingNoteParticipants([])
     setEditingNoteParticipantInput('')
     setIsParticipantsInputOpen(false)
+    setQuestionEpicId(null)
+    setShowLiveQuestionList(true)
+    setQuestionSelectionDirty(false)
   }
 
   const handleDeleteMeetingNote = async (noteId: string) => {
@@ -323,6 +329,28 @@ const OneOnOneFeed = ({
     const content = editingNoteDraft.trim()
     const title = editingNoteTitle.trim()
     if (!activeParticipant) return
+    setSavingNote(true)
+    setSaveError(null)
+    const activeNoteForSave =
+      editingNoteId && activeParticipant
+        ? (activeParticipant.meetingNotes ?? []).find((note) => note.id === editingNoteId)
+        : null
+    const snapshotSource = questionStories.map((story) => buildQuestionSnapshot(story))
+    const hasSavedSnapshots =
+      Boolean(
+        editingNoteId &&
+          activeNoteForSave &&
+          Array.isArray(activeNoteForSave.questionStorySnapshots) &&
+          activeNoteForSave.questionStorySnapshots.length > 0,
+      )
+    const shouldReuseSnapshots = hasSavedSnapshots && !questionSelectionDirty
+    const resolvedQuestionStorySnapshots = shouldReuseSnapshots
+      ? (activeNoteForSave?.questionStorySnapshots ?? [])
+      : snapshotSource
+    const resolvedQuestionStoryIds =
+      shouldReuseSnapshots && Array.isArray(activeNoteForSave?.questionStoryIds)
+        ? activeNoteForSave!.questionStoryIds
+        : questionStories.map((story) => story.id)
     const newNoteId = editingNoteId ? null : crypto.randomUUID()
     const createdAt = editingNoteDate ?? Date.now()
     const participantsForNote =
@@ -340,43 +368,56 @@ const OneOnOneFeed = ({
           meetingNotes: notes.map((note) =>
             note.id === editingNoteId
               ? {
-                  ...note,
-                  content,
-                  title,
-                  selectedEpicIds:
-                    activeParticipant.role === 'management'
-                      ? nonArchivedEpics.map((epic) => epic.id)
-                      : editingMeetingSelectedEpicIds,
-                  discussedStoryIds: existingDiscussed,
-                  participants:
-                    activeParticipant.role === 'general'
-                      ? participantsForNote ?? []
-                      : existingParticipants,
+                ...note,
+                content,
+                title,
+                selectedEpicIds:
+                  activeParticipant.role === 'management'
+                    ? nonArchivedEpics.map((epic) => epic.id)
+                    : editingMeetingSelectedEpicIds,
+                discussedStoryIds: existingDiscussed,
+                questionEpicId: questionEpicId ?? undefined,
+                questionStoryIds: resolvedQuestionStoryIds,
+                questionStorySnapshots: resolvedQuestionStorySnapshots,
+                participants:
+                  activeParticipant.role === 'general'
+                    ? participantsForNote ?? []
+                    : existingParticipants,
                 }
               : note,
-        ),
+          ),
+        }
       }
-    }
       return {
         ...participant,
         meetingNotes: [
-          {
-            id: newNoteId ?? crypto.randomUUID(),
-            createdAt,
-            content,
-            title,
-            selectedEpicIds:
-              activeParticipant.role === 'management'
-                ? nonArchivedEpics.map((epic) => epic.id)
-                : editingMeetingSelectedEpicIds,
-            discussedStoryIds: [],
-            participants: participantsForNote,
-          },
+            {
+              id: newNoteId ?? crypto.randomUUID(),
+              createdAt,
+              content,
+              title,
+              selectedEpicIds:
+                activeParticipant.role === 'management'
+                  ? nonArchivedEpics.map((epic) => epic.id)
+                  : editingMeetingSelectedEpicIds,
+              discussedStoryIds: [],
+              questionEpicId: questionEpicId ?? undefined,
+              questionStoryIds: resolvedQuestionStoryIds,
+              questionStorySnapshots: resolvedQuestionStorySnapshots,
+              participants: participantsForNote,
+            },
           ...notes,
         ],
       }
     })
-    await persistParticipants(next)
+    try {
+      await persistParticipants(next)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save meeting.')
+      return
+    } finally {
+      setSavingNote(false)
+    }
     if (newNoteId) {
       const updatedParticipant = next.find((p) => p.id === participantId)
       const created = updatedParticipant?.meetingNotes?.find(
@@ -395,16 +436,6 @@ const OneOnOneFeed = ({
       story.id === updatedStory.id ? updatedStory : story,
     )
     await persistStories(nextStories)
-  }
-
-  const handleAddTypeOfWork = async (value: string) => {
-    const trimmed = value.trim()
-    if (!trimmed) return
-    const exists = typeOfWorkOptions.some(
-      (option) => option.toLowerCase() === trimmed.toLowerCase(),
-    )
-    if (exists) return
-    await persistTypeOfWorkOptions([...typeOfWorkOptions, trimmed])
   }
 
   const addMeetingParticipantName = () => {
@@ -460,6 +491,66 @@ const OneOnOneFeed = ({
         !isStoryDone(story, doneStatusNormalized),
     )
   }, [sortedStories, meetingEpicIds, doneStatusNormalized])
+
+  const questionStories = useMemo(() => {
+    if (!questionEpicId) return []
+    return sortedStories.filter(
+      (story) =>
+        story.epicId === questionEpicId &&
+        !story.isDeleted &&
+        story.typeOfWork === 'Ask question in a Meeting' &&
+        !isStoryDone(story, doneStatusNormalized),
+    )
+  }, [sortedStories, questionEpicId, doneStatusNormalized])
+  const questionEligibleEpics = useMemo(() => {
+    const eligible = new Set<string>()
+    sortedStories.forEach((story) => {
+      if (
+        !story.isDeleted &&
+        story.typeOfWork === 'Ask question in a Meeting' &&
+        !isStoryDone(story, doneStatusNormalized)
+      ) {
+        eligible.add(story.epicId)
+      }
+    })
+    return epics
+      .filter((epic) => eligible.has(epic.id))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+  }, [sortedStories, epics, doneStatusNormalized])
+  useEffect(() => {
+    if (!questionEpicSelection) return
+    const isStillEligible = questionEligibleEpics.some(
+      (epic) => epic.id === questionEpicSelection,
+    )
+    if (!isStillEligible) {
+      setQuestionEpicSelection('')
+    }
+  }, [questionEligibleEpics, questionEpicSelection])
+  const activeNote = useMemo(() => {
+    if (!activeParticipant || !editingNoteId) return null
+    return (activeParticipant.meetingNotes ?? []).find((note) => note.id === editingNoteId) ?? null
+  }, [activeParticipant, editingNoteId])
+  const questionSnapshotItems = useMemo(() => {
+    if (!activeNote?.questionStorySnapshots?.length) return []
+    return activeNote.questionStorySnapshots.map((snapshot) => ({
+      id: snapshot.id,
+      title: snapshot.title || 'Untitled story',
+      epicId: snapshot.epicId,
+      story: stories.find((story) => story.id === snapshot.id),
+    }))
+  }, [activeNote, stories])
+  const liveQuestionItems = useMemo(
+    () =>
+      questionStories.map((story) => ({
+        id: story.id,
+        title: story.title || 'Untitled story',
+        epicId: story.epicId,
+        story,
+      })),
+    [questionStories],
+  )
+  const shouldShowSnapshots = !showLiveQuestionList && questionSnapshotItems.length > 0
+  const displayedQuestionStories = shouldShowSnapshots ? questionSnapshotItems : liveQuestionItems
   const tabItems = useMemo(
     () => [
       { id: HOME_TAB_ID, label: 'Home' },
@@ -479,7 +570,43 @@ const OneOnOneFeed = ({
     setEditingMeetingSelectedEpicIds([])
     setEditingNoteParticipants([])
     setEditingNoteParticipantInput('')
+    setQuestionEpicId(null)
+    setShowLiveQuestionList(true)
+    setQuestionSelectionDirty(false)
   }, [activeTabId])
+
+  useEffect(() => {
+    if (!editingNoteId) {
+      setShowLiveQuestionList(true)
+      setQuestionSelectionDirty(false)
+      return
+    }
+    const hasSnapshots = Boolean(activeNote?.questionStorySnapshots?.length)
+    setShowLiveQuestionList(!hasSnapshots)
+    setQuestionSelectionDirty(false)
+  }, [editingNoteId, activeNote?.questionStorySnapshots?.length])
+
+  useEffect(() => {
+    const refreshParticipants = async () => {
+      try {
+        const ctx = await loadDb()
+        const storedParticipants = loadMeetingParticipants(ctx.db)
+        setParticipants(storedParticipants)
+        await persistDb(ctx)
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : 'Failed to refresh meetings.')
+      }
+    }
+    const handleFocus = () => {
+      refreshParticipants()
+    }
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+    }
+  }, [])
 
   const exportMarkdown = () => {
     if (!activeParticipant) return
@@ -587,79 +714,81 @@ const OneOnOneFeed = ({
             )}
           </Card>
             ) : activeTabId === MEETING_PREFS_TAB_ID ? (
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr),minmax(0,1fr)]">
-                <Card className="p-4 space-y-3">
-                  <div>
-                    <p className="text-sm font-semibold text-text-primary">Add person</p>
-                <p className="text-xs text-text-secondary">
-                  Create a meeting tab and set their default role.
-                </p>
-              </div>
-                  <div className="grid gap-2 md:grid-cols-[1fr,180px,auto]">
-                    <Input
-                      placeholder="Name"
-                      value={newParticipantName}
-                      onChange={(e) => setNewParticipantName(e.target.value)}
-                    />
-                <Select
-                  value={newParticipantRole}
-                  onChange={(e) =>
-                    setNewParticipantRole(e.target.value as MeetingParticipantRole)
-                  }
-                >
-                  <option value="management">Manager</option>
-                  <option value="normal">Colleague</option>
-                  <option value="supervised">Team member</option>
-                  <option value="general">General</option>
-                    </Select>
-                    <Button onClick={handleAddParticipant}>Add</Button>
-                  </div>
-                </Card>
-                <Card className="p-4 space-y-3">
-                  <div>
-                    <p className="text-sm font-semibold text-text-primary">Current people</p>
-                    <p className="text-xs text-text-secondary">
-                      Edit names or roles for existing meeting participants.
-                    </p>
-                  </div>
-                  {participants.length === 0 ? (
-                    <p className="text-sm text-text-secondary">No meeting participants yet.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {participants.map((participant) => (
-                        <div
-                          key={participant.id}
-                          className="grid gap-2 md:grid-cols-[1fr,200px,auto] items-center rounded-xl border border-border bg-surface-2 px-3 py-2"
-                        >
-                          <Input
-                            value={participant.name}
-                            onChange={async (e) =>
-                              handleUpdateParticipant(participant.id, {
-                                name: e.target.value,
-                              })
-                            }
-                          />
-                          <Select
-                            value={participant.role}
-                            onChange={async (e) =>
-                              handleUpdateParticipant(participant.id, {
-                                role: e.target.value as MeetingParticipantRole,
-                              })
-                            }
-                          >
-                            <option value="management">Manager</option>
-                            <option value="normal">Colleague</option>
-                            <option value="supervised">Team member</option>
-                            <option value="general">General</option>
-                          </Select>
-                          <span className="text-[11px] text-text-secondary text-right">
-                            {(participant.meetingNotes?.length ?? 0)} meetings
-                          </span>
-                        </div>
-                      ))}
+              <div className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr),minmax(0,1fr)]">
+                  <Card className="p-4 space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-text-primary">Add person</p>
+                      <p className="text-xs text-text-secondary">
+                        Create a meeting tab and set their default role.
+                      </p>
                     </div>
-                  )}
-                </Card>
+                    <div className="grid gap-2 md:grid-cols-[1fr,180px,auto]">
+                      <Input
+                        placeholder="Name"
+                        value={newParticipantName}
+                        onChange={(e) => setNewParticipantName(e.target.value)}
+                      />
+                      <Select
+                        value={newParticipantRole}
+                        onChange={(e) =>
+                          setNewParticipantRole(e.target.value as MeetingParticipantRole)
+                        }
+                      >
+                        <option value="management">Manager</option>
+                        <option value="normal">Colleague</option>
+                        <option value="supervised">Team member</option>
+                        <option value="general">General</option>
+                      </Select>
+                      <Button onClick={handleAddParticipant}>Add</Button>
+                    </div>
+                  </Card>
+                  <Card className="p-4 space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-text-primary">Current people</p>
+                      <p className="text-xs text-text-secondary">
+                        Edit names or roles for existing meeting participants.
+                      </p>
+                    </div>
+                    {participants.length === 0 ? (
+                      <p className="text-sm text-text-secondary">No meeting participants yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {participants.map((participant) => (
+                          <div
+                            key={participant.id}
+                            className="grid gap-2 md:grid-cols-[1fr,200px,auto] items-center rounded-xl border border-border bg-surface-2 px-3 py-2"
+                          >
+                            <Input
+                              value={participant.name}
+                              onChange={async (e) =>
+                                handleUpdateParticipant(participant.id, {
+                                  name: e.target.value,
+                                })
+                              }
+                            />
+                            <Select
+                              value={participant.role}
+                              onChange={async (e) =>
+                                handleUpdateParticipant(participant.id, {
+                                  role: e.target.value as MeetingParticipantRole,
+                                })
+                              }
+                            >
+                              <option value="management">Manager</option>
+                              <option value="normal">Colleague</option>
+                              <option value="supervised">Team member</option>
+                              <option value="general">General</option>
+                            </Select>
+                            <span className="text-[11px] text-text-secondary text-right">
+                              {(participant.meetingNotes?.length ?? 0)} meetings
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+                </div>
               </div>
             ) : activeParticipant ? (
           <div className="space-y-4">
@@ -694,8 +823,9 @@ const OneOnOneFeed = ({
                   "w-full",
                   editingNoteDate && "bg-emerald-500 text-white hover:bg-emerald-600"
                 )}
+                disabled={savingNote}
               >
-                {editingNoteDate ? 'Save meeting' : 'Add new meeting'}
+                {editingNoteDate ? (savingNote ? 'Saving…' : 'Save meeting') : 'Add new meeting'}
               </Button>
               <Select
                 className="w-full"
@@ -727,6 +857,9 @@ const OneOnOneFeed = ({
                   ))}
               </Select>
             </div>
+            {saveError ? (
+              <p className="text-xs text-red-300">{saveError}</p>
+            ) : null}
 
             <Card className="p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -826,6 +959,68 @@ const OneOnOneFeed = ({
                     placeholder="Write meeting notes..."
                     className="min-h-[200px]"
                   />
+                  <div className="mt-4 space-y-3">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setQuestionEpicSelection(questionEpicId ?? '')
+                        setIsQuestionEpicDialogOpen(true)
+                      }}
+                    >
+                      {questionEpicId && displayedQuestionStories.length > 0
+                        ? `Loaded Epic: ${epics.find((epic) => epic.id === questionEpicId)?.name ?? ''}`
+                        : 'Select epic for meeting questions'}
+                    </Button>
+                    {questionEpicId ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-xs text-text-secondary">
+                          <span>
+                            Questions from{' '}
+                            {epics.find((epic) => epic.id === questionEpicId)?.name ??
+                              'Selected epic'}
+                          </span>
+                          <span>{displayedQuestionStories.length} items</span>
+                        </div>
+                        {displayedQuestionStories.length === 0 ? (
+                          <p className="text-sm text-text-secondary">
+                            No open meeting questions for this epic.
+                          </p>
+                        ) : (
+                          <ol className="list-decimal space-y-2 pl-5 text-sm text-text-primary">
+                            {displayedQuestionStories.map((item) => {
+                              const canOpen = Boolean(item.story && !item.story.isDeleted)
+                              return (
+                                <li key={`${item.id}-${item.story ? 'existing' : 'snapshot'}`}>
+                                  {canOpen ? (
+                                    <button
+                                      type="button"
+                                      className="text-primary underline underline-offset-2"
+                                      onClick={() => {
+                                        window.sessionStorage.setItem(
+                                          'open-inbox-story-id',
+                                          item.id,
+                                        )
+                                        window.dispatchEvent(
+                                          new CustomEvent('open-inbox-story', {
+                                            detail: { storyId: item.id },
+                                          }),
+                                        )
+                                      }}
+                                    >
+                                      {item.title}
+                                    </button>
+                                  ) : (
+                                    <span className="text-text-secondary">{item.title}</span>
+                                  )}
+                                </li>
+                              )
+                            })}
+                          </ol>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               )}
             </Card>
@@ -837,6 +1032,45 @@ const OneOnOneFeed = ({
         </Card>
       )}
     </div>
+
+      <Dialog
+        open={isQuestionEpicDialogOpen}
+        onClose={() => setIsQuestionEpicDialogOpen(false)}
+        title="Select an Epic with questions to be Asked"
+      >
+        <div className="space-y-4">
+          <Select
+            value={questionEpicSelection}
+            onChange={(e) => setQuestionEpicSelection(e.target.value)}
+          >
+            <option value="" disabled>
+              Choose an epic
+            </option>
+            {questionEligibleEpics.map((epic) => (
+              <option key={epic.id} value={epic.id}>
+                {epic.name}
+              </option>
+            ))}
+          </Select>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setIsQuestionEpicDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!questionEpicSelection) return
+                setShowLiveQuestionList(true)
+                setQuestionSelectionDirty(true)
+                setQuestionEpicId(questionEpicSelection)
+                setIsQuestionEpicDialogOpen(false)
+              }}
+              disabled={!questionEpicSelection}
+            >
+              Show questions
+            </Button>
+          </div>
+        </div>
+      </Dialog>
 
     </>
   )

@@ -4,7 +4,16 @@ import { cn } from "@inbox/lib/utils";
 import { Checkbox } from "@inbox/components/ui/checkbox";
 import { Button } from "@inbox/components/ui/button";
 import { Trash2, RotateCcw, Flag } from "lucide-react";
-import { differenceInCalendarDays, format, isPast, isSameMonth, isToday, startOfMonth } from "date-fns";
+import {
+  differenceInCalendarDays,
+  differenceInCalendarMonths,
+  format,
+  isPast,
+  isSameDay,
+  isSameMonth,
+  isToday,
+  startOfMonth,
+} from "date-fns";
 
 interface StoryListItemProps {
   story: Story;
@@ -79,6 +88,18 @@ export function StoryListItem({
     : null;
   const startDate = story.startDate ? new Date(story.startDate) : null;
   const daysUntilStart = startDate ? differenceInCalendarDays(startDate, now) : null;
+  const boxDate = startDate ?? effectiveDueDate;
+  const isStartBox = Boolean(startDate);
+  const isBoxToday = boxDate
+    ? isMonthly
+      ? isSameMonth(boxDate, now)
+      : isSameDay(boxDate, now)
+    : false;
+  const dueMonthDate = effectiveDueDate ?? null;
+  const currentMonthDate = startDate ?? dueMonthDate;
+  const isQuarterCurrentMonth = Boolean(
+    currentMonthDate && isMonthly && isSameMonth(currentMonthDate, now)
+  );
   const dueValueClass =
     (dueDays ?? 0) <= 0
       ? "text-destructive"
@@ -155,19 +176,57 @@ export function StoryListItem({
       </>
     );
   })();
-  const duePillTextClass =
-    dueDays === null
-      ? "text-muted-foreground"
-      : dueDays === 0
-      ? "text-yellow-700 font-semibold"
-      : dueDays < 0
-      ? "text-destructive"
-      : "text-muted-foreground";
+  const isStartToday = Boolean(startDate && daysUntilStart === 0);
+  const duePillTextClass = isMonthly
+    ? "text-muted-foreground"
+    : isStartToday
+    ? "text-yellow-700 font-semibold"
+    : dueDays === null
+    ? "text-muted-foreground"
+    : dueDays === 0
+    ? "text-yellow-700 font-semibold"
+    : dueDays < 0
+    ? "text-destructive"
+    : "text-muted-foreground";
   const pillBaseClass =
     "inline-flex items-center rounded-full border border-panel-border bg-muted px-2 py-0.5 text-[10px] leading-none font-medium";
-  const duePillBackgroundClass =
-    dueDays === 0 ? "border-yellow-500/60 bg-yellow-500/15" : "";
-  const quarterLabel = `Q${Math.floor(displayDate.getMonth() / 3) + 1}`;
+  const duePillBackgroundClass = isMonthly
+    ? ""
+    : isStartToday || dueDays === 0
+    ? "border-yellow-500/60 bg-yellow-500/15"
+    : "";
+  const quarterLabel = boxDate
+    ? `Q${Math.floor(boxDate.getMonth() / 3) + 1}`
+    : `Q${Math.floor(displayDate.getMonth() / 3) + 1}`;
+  const highlightVariantClass = "border-yellow-500/60 bg-yellow-500/15 text-yellow-700 due-today-pulse";
+  const durationMonths =
+    startDate && dueMonthDate
+      ? Math.max(
+          1,
+          differenceInCalendarMonths(dueMonthDate, startDate) + 1
+        )
+      : currentMonthDate
+      ? 1
+      : 0;
+  const durationLabel = durationMonths > 0 ? `${durationMonths}M` : "-";
+  const quarterBoxVariantClass = isQuarterCurrentMonth
+    ? highlightVariantClass
+    : isOnHold
+    ? "border-border bg-transparent text-muted-foreground"
+    : isDoneDisplay
+    ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-700"
+    : isBoxToday
+    ? highlightVariantClass
+    : isOverdue
+    ? "border-destructive/50 bg-destructive/10 text-destructive"
+    : "border-border bg-surface-2 text-muted-foreground";
+  const boxLabel = isStartBox
+    ? isMonthly
+      ? "Start month"
+      : "Start date"
+    : isMonthly
+    ? "Change due month"
+    : "Change due date";
 
   return (
     <div
@@ -190,12 +249,7 @@ export function StoryListItem({
           >
             <Checkbox
               checked={isCompleted}
-              className={cn(
-                "h-5 w-5 rounded border-2 transition-colors",
-                story.priority === 'high' && "border-destructive data-[state=checked]:bg-destructive data-[state=checked]:border-destructive",
-                story.priority === 'medium' && "border-yellow-500 data-[state=checked]:bg-yellow-500 data-[state=checked]:border-yellow-500",
-                story.priority === 'low' && "border-border"
-              )}
+              className="h-5 w-5 rounded border-2 transition-colors border-border"
             />
           </div>
           <div className="grid grid-cols-[auto,minmax(0,1fr),auto,auto] items-start gap-3 w-full">
@@ -241,73 +295,87 @@ export function StoryListItem({
                     {story.typeOfWork}
                   </span>
                 ) : null}
+                {story.priority !== "low" ? (
+                  <Flag
+                    className={cn(
+                      "h-3.5 w-3.5 shrink-0",
+                      story.priority === "high"
+                        ? "text-destructive fill-destructive"
+                        : "text-yellow-600 fill-yellow-600"
+                    )}
+                    aria-hidden="true"
+                  />
+                ) : null}
               </div>
             </div>
-            {effectiveDueDate ? (
+            {boxDate ? (
               <div className="-ml-1 flex flex-col items-center justify-center">
-                <button
-                  type="button"
-                  className={cn(
-                    "relative flex h-14 w-12 flex-col items-center justify-center gap-0.5 rounded-md border text-[10px] font-semibold leading-tight transition-colors",
-                    isOnHold
-                      ? "border-border bg-transparent text-muted-foreground"
-                      : isDoneDisplay
-                      ? "border-emerald-400/60 bg-emerald-400/10 text-emerald-700"
-                      : isDueToday
-                      ? "border-yellow-500/60 bg-yellow-500/15 text-yellow-700 due-today-pulse"
-                      : isOverdue
-                      ? "border-destructive/50 bg-destructive/10 text-destructive"
-                      : "border-border bg-surface-2 text-muted-foreground",
-                    onDueDateChange ? "hover:bg-hover-overlay cursor-pointer" : "cursor-default"
-                  )}
-                  aria-label="Change due date"
-                  title="Change due date"
+          <div
+            className={cn(
+              "relative flex h-14 w-12 flex-col items-center justify-center gap-0.5 rounded-md border text-[10px] font-semibold leading-tight transition-colors",
+              quarterBoxVariantClass,
+              !isStartBox && onDueDateChange
+                ? "hover:bg-hover-overlay cursor-pointer"
+                : "cursor-default"
+            )}
+                  aria-label={boxLabel}
+                  title={boxLabel}
                   onClick={(e) => {
+                    if (isStartBox) return;
                     e.stopPropagation();
                     if (!onDueDateChange) return;
                     const input = dueInputRef.current;
                     if (!input) return;
                     input.focus();
-                    if (typeof (input as HTMLInputElement & { showPicker?: () => void }).showPicker === "function") {
+                    if (
+                      typeof (input as HTMLInputElement & {
+                        showPicker?: () => void;
+                      }).showPicker === "function"
+                    ) {
                       (input as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
                     }
                   }}
                 >
-                  <input
-                    ref={dueInputRef}
-                    type={isMonthly ? "month" : "date"}
-                    value={
-                      effectiveDueDate
-                        ? format(effectiveDueDate, isMonthly ? "yyyy-MM" : "yyyy-MM-dd")
-                        : ""
-                    }
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      if (!value) return;
-                      const nextDate = isMonthly
-                        ? new Date(`${value}-01T00:00:00`)
-                        : new Date(`${value}T00:00:00`);
-                      onDueDateChange?.(nextDate);
-                    }}
-                    className="due-date-input absolute inset-0 z-10 h-full w-full cursor-pointer"
-                    aria-hidden="true"
-                    disabled={!onDueDateChange}
-                  />
+                  {!isStartBox && (
+                    <input
+                      ref={dueInputRef}
+                      type={isMonthly ? "month" : "date"}
+                      value={
+                        effectiveDueDate
+                          ? format(effectiveDueDate, isMonthly ? "yyyy-MM" : "yyyy-MM-dd")
+                          : ""
+                      }
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!value) return;
+                        const nextDate = isMonthly
+                          ? new Date(`${value}-01T00:00:00`)
+                          : new Date(`${value}T00:00:00`);
+                        onDueDateChange?.(nextDate);
+                      }}
+                      className="due-date-input absolute inset-0 z-10 h-full w-full cursor-pointer"
+                      aria-hidden="true"
+                      disabled={!onDueDateChange}
+                    />
+                  )}
                   {isMonthly ? (
                     <>
+                      <span className="text-[10px] font-semibold pointer-events-none">
+                        {format(boxDate, "MMM")}
+                      </span>
                       <span
                         className={cn(
                           "text-lg font-semibold leading-none pointer-events-none",
-                          isDoneDisplay
-                            ? "text-emerald-700"
-                            : "text-blue-600"
+                          isDoneDisplay ? "text-emerald-700" : "text-blue-600"
                         )}
                       >
                         {quarterLabel}
                       </span>
-                      <span className="text-[10px] font-semibold pointer-events-none">
-                        {format(displayDate, "MMM")}
+                      <span
+                        className="text-[10px] font-semibold pointer-events-none text-muted-foreground"
+                      >
+                        {durationLabel}
                       </span>
                     </>
                   ) : (
@@ -318,7 +386,7 @@ export function StoryListItem({
                           isOnHold ? "text-muted-foreground" : ""
                         )}
                       >
-                        {format(displayDate, "EEE").toUpperCase()}
+                        {format(boxDate, "EEE").toUpperCase()}
                       </span>
                       <span
                         className={cn(
@@ -330,7 +398,7 @@ export function StoryListItem({
                             : "text-blue-600"
                         )}
                       >
-                        {format(displayDate, "d")}
+                        {format(boxDate, "d")}
                       </span>
                       <span
                         className={cn(
@@ -338,11 +406,11 @@ export function StoryListItem({
                           isOnHold ? "text-muted-foreground" : ""
                         )}
                       >
-                        {format(displayDate, "MMM").toUpperCase()}
+                        {format(boxDate, "MMM").toUpperCase()}
                       </span>
                     </>
                   )}
-                </button>
+                </div>
               </div>
             ) : null}
             {(onPriorityChange || onDelete) && (
@@ -367,7 +435,8 @@ export function StoryListItem({
                         "w-3.5 h-3.5",
                         story.priority === "high" &&
                           "text-destructive fill-destructive",
-                        story.priority === "medium" && "text-yellow-500",
+                        story.priority === "medium" &&
+                          "text-yellow-600 fill-yellow-600",
                         story.priority === "low" && "text-muted-foreground"
                       )}
                     />

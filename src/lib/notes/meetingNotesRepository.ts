@@ -21,8 +21,8 @@ const mapRow = (row: any[]): MeetingNote => ({
   project: row[4] || undefined,
   attendees: row[5] || undefined,
   meetingDate: (row[6] as number) ?? null,
-  createdAt: row[7],
-  updatedAt: row[8],
+  createdAt: Number(row[7] ?? 0),
+  updatedAt: Number(row[8] ?? 0),
 })
 
 export const listNotes = (db: Database): MeetingNote[] => {
@@ -44,9 +44,11 @@ export const saveNote = (db: Database, note: MeetingNote) => {
      ON CONFLICT(id) DO UPDATE SET
       title=excluded.title,
       content=excluded.content,
+      color=excluded.color,
       project=excluded.project,
       attendees=excluded.attendees,
       meeting_date=excluded.meeting_date,
+      created_at=excluded.created_at,
       updated_at=excluded.updated_at;`,
   )
   stmt.run([

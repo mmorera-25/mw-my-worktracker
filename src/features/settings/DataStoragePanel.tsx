@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
 import Input from '../../components/ui/Input'
-import Badge from '../../components/ui/Badge'
 import Select from '../../components/ui/Select'
 import Dialog from '../../components/ui/Dialog'
 import type { WorkflowConfig } from '../../lib/settings/configRepository'
@@ -24,6 +23,7 @@ import {
   toggleThemeMode,
   type ThemeMode,
 } from '../../theme/applyTheme'
+import { GripVertical, Pencil, Trash2 } from 'lucide-react'
 
 type Mode = 'fs-access' | 'idb'
 
@@ -38,6 +38,8 @@ const hasFileSystemAccess = () =>
 type Props = {
   workflow: WorkflowConfig
   onUpdateWorkflow: (config: WorkflowConfig) => Promise<void> | void
+  typeOfWorkOptions: string[]
+  onPersistTypeOfWorkOptions: (next: string[]) => Promise<void> | void
   onStorageReady?: () => void
   requiresStorageSetup?: boolean
 }
@@ -45,6 +47,8 @@ type Props = {
 const DataStoragePanel = ({
   workflow,
   onUpdateWorkflow,
+  typeOfWorkOptions,
+  onPersistTypeOfWorkOptions,
   onStorageReady,
   requiresStorageSetup = false,
 }: Props) => {
@@ -59,6 +63,14 @@ const DataStoragePanel = ({
   const [columns, setColumns] = useState<string[]>(workflow.columns)
   const [swimlanes, setSwimlanes] = useState<string[]>(workflow.swimlanes)
   const [accent, setAccent] = useState<WorkflowConfig['accent']>(workflow.accent)
+  const [typeOptions, setTypeOptions] = useState<string[]>(typeOfWorkOptions)
+  const [newColumnLabel, setNewColumnLabel] = useState('')
+  const [newSwimlaneLabel, setNewSwimlaneLabel] = useState('')
+  const [newTypeLabel, setNewTypeLabel] = useState('')
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [laneMessage, setLaneMessage] = useState<string | null>(null)
+  const [typeMessage, setTypeMessage] = useState<string | null>(null)
+  const [savingWorkflow, setSavingWorkflow] = useState(false)
   const [importPreview, setImportPreview] = useState<Snapshot | null>(null)
   const [importStrategy, setImportStrategy] = useState<ImportStrategy>('merge')
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => getThemeMode())
@@ -67,6 +79,7 @@ const DataStoragePanel = ({
   )
   const [showStorageWarning, setShowStorageWarning] = useState(false)
   const storageReady = mode === 'fs-access' && !!dirHandle
+  const dragState = useRef<{ listKey: string; index: number } | null>(null)
 
   useEffect(() => {
     if (mode !== 'fs-access') return
@@ -89,15 +102,13 @@ const DataStoragePanel = ({
     setAccent(workflow.accent)
   }, [workflow])
   useEffect(() => {
+    setTypeOptions(typeOfWorkOptions)
+  }, [typeOfWorkOptions])
+  useEffect(() => {
     if (requiresStorageSetup) {
       setActiveTab('storage')
     }
   }, [requiresStorageSetup])
-  useEffect(() => {
-    if (!storageReady) {
-      setActiveTab('storage')
-    }
-  }, [storageReady])
 
 
   const persistenceLabel = useMemo(
@@ -145,16 +156,159 @@ const DataStoragePanel = ({
   const normalizeList = (list: string[]) =>
     list.map((c) => c.trim()).filter((c, idx, arr) => c && arr.indexOf(c) === idx)
 
+  const reorderList = (list: string[], from: number, to: number) => {
+    if (from === to) return list
+    const next = [...list]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    return next
+  }
+
+  const handleDragStart = (listKey: string, index: number) => {
+    dragState.current = { listKey, index }
+  }
+
+  const handleDrop = (
+    listKey: string,
+    index: number,
+    setter: (updater: (prev: string[]) => string[]) => void,
+  ) => {
+    if (!dragState.current || dragState.current.listKey !== listKey) return
+    setter((prev) => reorderList(prev, dragState.current!.index, index))
+    dragState.current = null
+  }
+
+  const handleDragEnd = () => {
+    dragState.current = null
+  }
+
   const handleSaveWorkflow = async () => {
-    const nextColumns = normalizeList(columns) || workflow.columns
-    const nextSwimlanes = normalizeList(swimlanes) || workflow.swimlanes
-    const next: WorkflowConfig = {
-      columns: nextColumns.length ? nextColumns : workflow.columns,
-      swimlanes: nextSwimlanes.length ? nextSwimlanes : workflow.swimlanes,
-      accent,
+    setSavingWorkflow(true)
+    setMessage(null)
+    setError(null)
+    try {
+      const nextColumns = normalizeList(columns) || workflow.columns
+      const nextSwimlanes = normalizeList(swimlanes) || workflow.swimlanes
+      const normalizedTypes = normalizeList(typeOptions)
+      if (
+        normalizedTypes.length !== typeOptions.length ||
+        normalizedTypes.some((item, idx) => item !== typeOptions[idx])
+      ) {
+        setTypeOptions(normalizedTypes)
+      }
+      const next: WorkflowConfig = {
+        columns: nextColumns.length ? nextColumns : workflow.columns,
+        swimlanes: nextSwimlanes.length ? nextSwimlanes : workflow.swimlanes,
+        accent,
+      }
+      await onUpdateWorkflow(next)
+      await onPersistTypeOfWorkOptions(normalizedTypes)
+      setMessage('Workflow updated.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save workflow.')
+    } finally {
+      setSavingWorkflow(false)
     }
-    await onUpdateWorkflow(next)
-    setMessage('Workflow updated.')
+  }
+
+  const addColumnLabel = () => {
+    const trimmed = newColumnLabel.trim()
+    if (!trimmed) {
+      setStatusMessage('Enter a status label.')
+      return
+    }
+    if (columns.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
+      setStatusMessage('That status already exists.')
+      return
+    }
+    setColumns((prev) => [...prev, trimmed])
+    setNewColumnLabel('')
+    setStatusMessage(null)
+  }
+
+  const renameColumnLabel = (index: number) => {
+    const current = columns[index]
+    const nextLabel = window.prompt('Rename status', current)?.trim()
+    if (!nextLabel || nextLabel === current) return
+    if (columns.some((item) => item.toLowerCase() === nextLabel.toLowerCase())) {
+      setStatusMessage('A status with that name already exists.')
+      return
+    }
+    setColumns((prev) => prev.map((item, idx) => (idx === index ? nextLabel : item)))
+    setStatusMessage(null)
+  }
+
+  const deleteColumnLabel = (index: number) => {
+    if (columns.length <= 1) {
+      setStatusMessage('You need at least one status.')
+      return
+    }
+    if (!window.confirm(`Delete "${columns[index]}"?`)) return
+    setColumns((prev) => prev.filter((_, idx) => idx !== index))
+  }
+
+  const addSwimlaneLabel = () => {
+    const trimmed = newSwimlaneLabel.trim()
+    if (!trimmed) {
+      setLaneMessage('Enter a swimlane name.')
+      return
+    }
+    if (swimlanes.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
+      setLaneMessage('That swimlane already exists.')
+      return
+    }
+    setSwimlanes((prev) => [...prev, trimmed])
+    setNewSwimlaneLabel('')
+    setLaneMessage(null)
+  }
+
+  const renameSwimlaneLabel = (index: number) => {
+    const current = swimlanes[index]
+    const nextLabel = window.prompt('Rename swimlane', current)?.trim()
+    if (!nextLabel || nextLabel === current) return
+    if (swimlanes.some((item) => item.toLowerCase() === nextLabel.toLowerCase())) {
+      setLaneMessage('A swimlane with that name already exists.')
+      return
+    }
+    setSwimlanes((prev) => prev.map((item, idx) => (idx === index ? nextLabel : item)))
+    setLaneMessage(null)
+  }
+
+  const deleteSwimlaneLabel = (index: number) => {
+    if (!window.confirm(`Delete swimlane "${swimlanes[index]}"?`)) return
+    setSwimlanes((prev) => prev.filter((_, idx) => idx !== index))
+  }
+
+  const addTypeLabel = () => {
+    const trimmed = newTypeLabel.trim()
+    if (!trimmed) {
+      setTypeMessage('Enter a label.')
+      return
+    }
+    if (typeOptions.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
+      setTypeMessage('That option already exists.')
+      return
+    }
+    setTypeOptions((prev) => [...prev, trimmed])
+    setNewTypeLabel('')
+    setTypeMessage(null)
+  }
+
+  const renameTypeLabel = (index: number) => {
+    const current = typeOptions[index]
+    const nextLabel = window.prompt('Rename option', current)?.trim()
+    if (!nextLabel || nextLabel === current) return
+    if (typeOptions.some((item) => item.toLowerCase() === nextLabel.toLowerCase())) {
+      setTypeMessage('An option with that name already exists.')
+      return
+    }
+    setTypeOptions((prev) => prev.map((item, idx) => (idx === index ? nextLabel : item)))
+    setTypeMessage(null)
+  }
+
+  const deleteTypeLabel = (index: number) => {
+    if (!window.confirm(`Delete option "${typeOptions[index]}"?`)) return
+    setTypeOptions((prev) => prev.filter((_, idx) => idx !== index))
   }
 
   const downloadJson = (data: Snapshot, filename: string) => {
@@ -365,132 +519,243 @@ const DataStoragePanel = ({
       </div>
 
       {activeTab === 'preferences' ? (
-        <Card className="p-6 space-y-4">
-          <div className="flex items-center justify-between">
+        <Card className="p-4 space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-semibold text-text-primary">User preferences</p>
+              <p className="text-sm font-semibold text-text-primary">Workflow layout</p>
               <p className="text-xs text-text-secondary">
-                Update epic status and swimlanes. Changes apply immediately.
+                Drag handles to reorder statuses, swimlanes, and type-of-work values. Rename or delete items directly.
               </p>
             </div>
+            {(message || error) && (
+              <div className="text-right space-y-1">
+                {message ? <p className="text-xs text-emerald-500">{message}</p> : null}
+                {error ? <p className="text-xs text-red-500">{error}</p> : null}
+              </div>
+            )}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <p className="text-sm text-text-secondary">Epic Status</p>
-              {columns.map((col, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <Input
-                    value={col}
-                    onChange={(e) =>
-                      setColumns((list) => list.map((v, i) => (i === idx ? e.target.value : v)))
-                    }
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      setColumns((list) => {
-                        const next = [...list]
-                        ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
-                        return next
-                      })
-                    }
-                    disabled={idx === 0}
-                  >
-                    ↑
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      setColumns((list) => {
-                        const next = [...list]
-                        ;[next[idx + 1], next[idx]] = [next[idx], next[idx + 1]]
-                        return next
-                      })
-                    }
-                    disabled={idx === columns.length - 1}
-                  >
-                    ↓
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setColumns((list) => list.filter((_, i) => i !== idx))}
-                  >
-                    ✕
-                  </Button>
+          <div className="grid gap-3 lg:grid-cols-3">
+            <div className="rounded-2xl border border-panel-border bg-surface-2/70 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Epic status</p>
+                  <p className="text-[11px] text-text-secondary">Drag to reorder, rename, or remove.</p>
                 </div>
-              ))}
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setColumns((list) => [...list, `Status ${list.length + 1}`])}
-              >
-                Add status
-              </Button>
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {columns.length}
+                </span>
+              </div>
+              <div className="mt-3 space-y-2 max-h-[220px] overflow-y-auto">
+                {columns.map((col, idx) => (
+                  <div
+                    key={`status-${idx}-${col}`}
+                    draggable
+                    onDragStart={() => handleDragStart('columns', idx)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      handleDrop('columns', idx, setColumns)
+                    }}
+                    onDragEnd={handleDragEnd}
+                    className="group flex items-center gap-2 rounded-md border border-transparent bg-background px-2 py-1 text-sm shadow-sm transition hover:border-border"
+                  >
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    <span className="flex-1 truncate font-medium text-text-primary">{col}</span>
+                    <div className="flex gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => renameColumnLabel(idx)}
+                        aria-label="Rename status"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => deleteColumnLabel(idx)}
+                        aria-label="Delete status"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Input
+                  placeholder="Add status"
+                  value={newColumnLabel}
+                  onChange={(e) => {
+                    setNewColumnLabel(e.target.value)
+                    setStatusMessage(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addColumnLabel()
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button size="sm" onClick={addColumnLabel}>
+                  Add
+                </Button>
+              </div>
+              {statusMessage ? <p className="text-[11px] text-amber-500">{statusMessage}</p> : null}
             </div>
 
-            <div className="space-y-2">
-              <p className="text-sm text-text-secondary">Swimlanes</p>
-              {swimlanes.map((lane, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <Input
-                    value={lane}
-                    onChange={(e) =>
-                      setSwimlanes((list) => list.map((v, i) => (i === idx ? e.target.value : v)))
-                    }
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      setSwimlanes((list) => {
-                        const next = [...list]
-                        ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
-                        return next
-                      })
-                    }
-                    disabled={idx === 0}
-                  >
-                    ↑
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      setSwimlanes((list) => {
-                        const next = [...list]
-                        ;[next[idx + 1], next[idx]] = [next[idx], next[idx + 1]]
-                        return next
-                      })
-                    }
-                    disabled={idx === swimlanes.length - 1}
-                  >
-                    ↓
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setSwimlanes((list) => list.filter((_, i) => i !== idx))}
-                  >
-                    ✕
-                  </Button>
+            <div className="rounded-2xl border border-panel-border bg-surface-2/70 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Swimlanes</p>
+                  <p className="text-[11px] text-text-secondary">Drag to reorder and rename lanes.</p>
                 </div>
-              ))}
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setSwimlanes((list) => [...list, `Lane ${list.length + 1}`])}
-              >
-                Add swimlane
-              </Button>
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {swimlanes.length}
+                </span>
+              </div>
+              <div className="mt-3 space-y-2 max-h-[220px] overflow-y-auto">
+                {swimlanes.map((lane, idx) => (
+                  <div
+                    key={`lane-${idx}-${lane}`}
+                    draggable
+                    onDragStart={() => handleDragStart('swimlanes', idx)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      handleDrop('swimlanes', idx, setSwimlanes)
+                    }}
+                    onDragEnd={handleDragEnd}
+                    className="group flex items-center gap-2 rounded-md border border-transparent bg-background px-2 py-1 text-sm shadow-sm transition hover:border-border"
+                  >
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    <span className="flex-1 truncate font-medium text-text-primary">{lane}</span>
+                    <div className="flex gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => renameSwimlaneLabel(idx)}
+                        aria-label="Rename swimlane"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => deleteSwimlaneLabel(idx)}
+                        aria-label="Delete swimlane"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Input
+                  placeholder="Add swimlane"
+                  value={newSwimlaneLabel}
+                  onChange={(e) => {
+                    setNewSwimlaneLabel(e.target.value)
+                    setLaneMessage(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addSwimlaneLabel()
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button size="sm" onClick={addSwimlaneLabel}>
+                  Add
+                </Button>
+              </div>
+              {laneMessage ? <p className="text-[11px] text-amber-500">{laneMessage}</p> : null}
+            </div>
+
+            <div className="rounded-2xl border border-panel-border bg-surface-2/70 p-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Type of work</p>
+                  <p className="text-[11px] text-text-secondary">
+                    Manage values that show in story and meeting picklists.
+                  </p>
+                </div>
+                <span className="text-[11px] text-muted-foreground tabular-nums">
+                  {typeOptions.length}
+                </span>
+              </div>
+              <div className="mt-3 space-y-2 max-h-[220px] overflow-y-auto">
+                {typeOptions.map((value, idx) => (
+                  <div
+                    key={`type-${idx}-${value}`}
+                    draggable
+                    onDragStart={() => handleDragStart('type', idx)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault()
+                      handleDrop('type', idx, setTypeOptions)
+                    }}
+                    onDragEnd={handleDragEnd}
+                    className="group flex items-center gap-2 rounded-md border border-transparent bg-background px-2 py-1 text-sm shadow-sm transition hover:border-border"
+                  >
+                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                    <span className="flex-1 truncate font-medium text-text-primary">{value}</span>
+                    <div className="flex gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => renameTypeLabel(idx)}
+                        aria-label="Rename type of work option"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => deleteTypeLabel(idx)}
+                        aria-label="Delete type of work option"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Input
+                  placeholder="Add option"
+                  value={newTypeLabel}
+                  onChange={(e) => {
+                    setNewTypeLabel(e.target.value)
+                    setTypeMessage(null)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addTypeLabel()
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button size="sm" onClick={addTypeLabel}>
+                  Add
+                </Button>
+              </div>
+              {typeMessage ? <p className="text-[11px] text-amber-500">{typeMessage}</p> : null}
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <Button onClick={handleSaveWorkflow}>Save workflow</Button>
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] text-text-secondary">
+              Reordering also updates the kanban board layout and story detail picklists.
+            </p>
+            <Button onClick={handleSaveWorkflow} disabled={savingWorkflow}>
+              {savingWorkflow ? 'Saving…' : 'Save'}
+            </Button>
           </div>
         </Card>
       ) : null

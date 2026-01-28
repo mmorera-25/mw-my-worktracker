@@ -171,7 +171,7 @@ export function StoryDetail({
     ? format(story.completedAt, "yyyy-MM-dd")
     : "";
   const startDateValue = story.startDate
-    ? format(story.startDate, "yyyy-MM-dd")
+    ? format(story.startDate, isYearly ? "yyyy-MM" : "yyyy-MM-dd")
     : "";
 
   const renderRichText = (value?: string) => {
@@ -385,12 +385,18 @@ export function StoryDetail({
       <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
 <aside className="relative z-10 w-full shrink-0 space-y-4 bg-slate-50 p-3 overflow-visible lg:w-64 lg:border-r lg:border-panel-border lg:shadow-[inset_-1px_0_0_rgba(0,0,0,0.06)]">
             <div className="space-y-1">
+              <p className="text-[11px] uppercase text-muted-foreground">Story ID</p>
+              <div className="flex h-7 items-center rounded-md border border-input bg-card/90 px-2 text-xs text-text-primary shadow-sm">
+                {story.storyCode ?? "ST-000"}
+              </div>
+            </div>
+            <div className="space-y-1">
               <p className="text-[11px] uppercase text-muted-foreground">Status</p>
               <Select
                 value={story.status}
                 onValueChange={(value) => onUpdateStory({ ...story, status: value })}
               >
-                <SelectTrigger className="h-7 w-full text-xs">
+                <SelectTrigger className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -415,7 +421,7 @@ export function StoryDetail({
                   onUpdateStory({ ...story, priority: value as Story["priority"] })
                 }
               >
-                <SelectTrigger className="h-7 w-full text-xs">
+                <SelectTrigger className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm">
                   <SelectValue placeholder="Priority" />
                 </SelectTrigger>
                 <SelectContent>
@@ -431,7 +437,7 @@ export function StoryDetail({
                 value={story.epicId}
                 onValueChange={(value) => onUpdateStory({ ...story, epicId: value })}
               >
-                <SelectTrigger className="h-7 w-full text-xs">
+                <SelectTrigger className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm">
                   <SelectValue placeholder="Epic" />
                 </SelectTrigger>
                 <SelectContent>
@@ -455,7 +461,7 @@ export function StoryDetail({
                   onUpdateStory({ ...story, typeOfWork: value });
                 }}
               >
-                <SelectTrigger className="h-7 w-full text-xs">
+                <SelectTrigger className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -469,26 +475,32 @@ export function StoryDetail({
               </Select>
             </div>
             <div className="space-y-1">
-              <p className="text-[11px] uppercase text-muted-foreground">Start date</p>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={startDateValue}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    onUpdateStory({
-                      ...story,
-                      startDate: value ? new Date(`${value}T00:00:00`) : undefined,
-                    });
-                  }}
-                  className="h-7 w-full text-xs"
+            <p className="text-[11px] uppercase text-muted-foreground">
+              {isYearly ? "Start month" : "Start date"}
+            </p>
+            <div className="flex items-center gap-2">
+              <Input
+                type={isYearly ? "month" : "date"}
+                value={startDateValue}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  onUpdateStory({
+                    ...story,
+                    startDate: value
+                      ? new Date(
+                          isYearly ? `${value}-01T00:00:00` : `${value}T00:00:00`
+                        )
+                      : undefined,
+                  });
+                }}
+                  className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm"
                 />
                 {story.startDate ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-7 w-7 rounded-md border border-input bg-card/90 shadow-sm"
                     onClick={() => {
                       onUpdateStory({ ...story, startDate: undefined });
                     }}
@@ -536,7 +548,7 @@ export function StoryDetail({
                         );
                         onUpdateStory({ ...story, dueDates: next });
                       }}
-                      className="h-7 w-full text-xs"
+                      className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm"
                     />
                       );
                     })()}
@@ -544,7 +556,7 @@ export function StoryDetail({
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7"
+                      className="h-7 w-7 rounded-md border border-input bg-card/90 shadow-sm"
                       onClick={() => {
                         const next = dueDates.filter((_, idx) => idx !== index);
                         onUpdateStory({ ...story, dueDates: next });
@@ -579,18 +591,25 @@ export function StoryDetail({
                 value={completedDateValue}
                 onChange={() => {}}
                 disabled
-                className="h-7 w-full text-xs opacity-60 cursor-not-allowed"
+                className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm opacity-60 cursor-not-allowed"
               />
             </div>
             <div className="space-y-2">
               <p className="text-[11px] uppercase text-muted-foreground">Quick actions</p>
               <div className="flex items-center gap-2">
-                <Button size="icon" variant="ghost" onClick={openNewComment} title="Add comment">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 rounded-md border border-input bg-card/90 shadow-sm"
+                  onClick={openNewComment}
+                  title="Add comment"
+                >
                   <MessageSquare className="w-4 h-4" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
+                  className="h-8 w-8 rounded-md border border-input bg-card/90 shadow-sm"
                   onClick={() => setIsLinkModalOpen(true)}
                   title="Add link"
                 >
@@ -605,6 +624,7 @@ export function StoryDetail({
                 <Button
                   variant="ghost"
                   size="icon"
+                  className="h-8 w-8 rounded-md border border-input bg-card/90 shadow-sm"
                   onClick={() => {
                     const input = document.getElementById("story-attachment-input") as HTMLInputElement | null;
                     input?.click();
@@ -803,20 +823,16 @@ export function StoryDetail({
                   className="rounded-lg border border-panel-border bg-background/40 px-3 py-2 text-sm"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div
-                      className="text-foreground leading-relaxed break-words rich-text-content"
-                      dangerouslySetInnerHTML={{ __html: comment.text }}
-                    />
+                    <button
+                      type="button"
+                      className="text-left text-foreground leading-relaxed break-words rich-text-content"
+                      onClick={() => openEditComment(comment.id, comment.text)}
+                    >
+                      <span
+                        dangerouslySetInnerHTML={{ __html: comment.text }}
+                      />
+                    </button>
                     <div className="flex items-center gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        onClick={() => openEditComment(comment.id, comment.text)}
-                        title="Edit comment"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
                       <Button
                         size="icon"
                         variant="ghost"

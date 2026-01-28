@@ -23,7 +23,11 @@ export type DbContext = {
 export const loadDb = async (): Promise<DbContext> => {
   const dir = await loadDirectoryHandle()
   if (dir) {
-    const permission = await dir.queryPermission({ mode: 'readwrite' })
+    let permission = await dir.queryPermission({ mode: 'readwrite' })
+    // If the browser reports "prompt", explicitly request access before falling back.
+    if (permission === 'prompt') {
+      permission = await dir.requestPermission({ mode: 'readwrite' })
+    }
     if (permission === 'granted') {
       const info = await ensureDatabase(dir)
       // info is unused here; ensureDatabase writes db to disk

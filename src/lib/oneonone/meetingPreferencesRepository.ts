@@ -17,8 +17,17 @@ export type MeetingNote = {
   title?: string
   selectedEpicIds: string[]
   discussedStoryIds: string[]
+  questionEpicId?: string
+  questionStoryIds?: string[]
+  questionStorySnapshots?: QuestionStorySnapshot[]
   selectedStoryIds?: string[]
   participants?: string[]
+}
+
+type QuestionStorySnapshot = {
+  id: string
+  title?: string
+  epicId?: string
 }
 
 const getJson = (db: Database, key: string) => {
@@ -51,6 +60,26 @@ const normalizeParticipant = (raw: Partial<MeetingParticipant>): MeetingParticip
           title: typeof note.title === 'string' ? note.title : undefined,
           selectedEpicIds: Array.isArray(note.selectedEpicIds) ? note.selectedEpicIds : [],
           discussedStoryIds: Array.isArray(note.discussedStoryIds) ? note.discussedStoryIds : [],
+          questionEpicId:
+            typeof note.questionEpicId === 'string' ? note.questionEpicId : undefined,
+          questionStoryIds: Array.isArray(note.questionStoryIds)
+            ? note.questionStoryIds.filter((id) => typeof id === 'string')
+            : undefined,
+          questionStorySnapshots: Array.isArray(note.questionStorySnapshots)
+            ? note.questionStorySnapshots
+                .map((snapshot) => ({
+                  id:
+                    typeof snapshot.id === 'string'
+                      ? snapshot.id
+                      : crypto.randomUUID(),
+                  title:
+                    typeof snapshot.title === 'string'
+                      ? snapshot.title
+                      : 'Untitled story',
+                  epicId: typeof snapshot.epicId === 'string' ? snapshot.epicId : '',
+                }))
+                .filter((snapshot) => Boolean(snapshot.id))
+            : undefined,
           selectedStoryIds: Array.isArray(note.selectedStoryIds)
             ? note.selectedStoryIds
             : undefined,

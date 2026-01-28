@@ -269,6 +269,32 @@
   margin-bottom: 0.25rem;
 }
 
+.rich-text-content li[data-list='checked'],
+.rich-text-content li[data-list='unchecked'] {
+  list-style-type: none;
+  position: relative;
+  padding-left: 1.5rem;
+  line-height: 1.5;
+}
+
+.rich-text-content li[data-list='checked']::before,
+.rich-text-content li[data-list='unchecked']::before {
+  position: absolute;
+  left: 0;
+  top: 0.05em;
+  font-size: 1.1em;
+  line-height: 1;
+  color: hsl(var(--muted-foreground));
+}
+
+.rich-text-content li[data-list='checked']::before {
+  content: "☑";
+}
+
+.rich-text-content li[data-list='unchecked']::before {
+  content: "☐";
+}
+
 .rich-text-content a {
   color: hsl(var(--primary));
   text-decoration: underline;

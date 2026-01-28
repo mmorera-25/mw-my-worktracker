@@ -17,29 +17,23 @@ import { listNotes, saveNote, deleteNote } from '../../lib/notes/meetingNotesRep
 import { Trash2, Check } from 'lucide-react'
 
 const colorOptions = [
-  { value: 'hsl(217, 91%, 60%)', label: 'Skyfire' },
-  { value: 'hsl(0, 84%, 60%)', label: 'Crimson Tide' },
-  { value: 'hsl(270, 70%, 60%)', label: 'Violet Drift' },
-  { value: 'hsl(142, 70%, 45%)', label: 'Emerald Glow' },
-  { value: 'hsl(25, 95%, 53%)', label: 'Sunforge' },
-  { value: 'hsl(330, 80%, 60%)', label: 'Neon Bloom' },
-  { value: 'hsl(199, 89%, 48%)', label: 'Blue Nebula' },
-  { value: 'hsl(280, 82%, 50%)', label: 'Royal Pulse' },
-  { value: 'hsl(210, 40%, 50%)', label: 'Steel Harbor' },
-  { value: 'hsl(210, 10%, 45%)', label: 'Slate Echo' },
-  { value: 'hsl(150, 45%, 45%)', label: 'Fern Trail' },
-  { value: 'hsl(10, 80%, 55%)', label: 'Lava Jet' },
-  { value: 'hsl(50, 90%, 55%)', label: 'Saffron Ray' },
-  { value: 'hsl(120, 50%, 45%)', label: 'Pine Ridge' },
-  { value: 'hsl(190, 70%, 45%)', label: 'Glacier Bay' },
-  { value: 'hsl(230, 75%, 55%)', label: 'Midnight Surf' },
-  { value: 'hsl(260, 60%, 55%)', label: 'Iris Circuit' },
-  { value: 'hsl(300, 70%, 55%)', label: 'Orchid Spark' },
-  { value: 'hsl(340, 70%, 55%)', label: 'Rose Signal' },
-  { value: 'hsl(20, 85%, 55%)', label: 'Copper Flame' },
-  { value: 'hsl(80, 70%, 45%)', label: 'Lime Crest' },
+  { value: 'hsl(210, 60%, 92%)', label: 'Cloud Blue' },
+  { value: 'hsl(340, 70%, 92%)', label: 'Blush' },
+  { value: 'hsl(150, 60%, 90%)', label: 'Mint Fog' },
+  { value: 'hsl(30, 70%, 92%)', label: 'Apricot' },
+  { value: 'hsl(260, 50%, 90%)', label: 'Lavender Mist' },
+  { value: 'hsl(200, 60%, 90%)', label: 'Sea Breeze' },
+  { value: 'hsl(25, 70%, 90%)', label: 'Peach Bloom' },
+  { value: 'hsl(50, 80%, 90%)', label: 'Sunny Cream' },
+  { value: 'hsl(170, 40%, 90%)', label: 'Pistachio' },
+  { value: 'hsl(330, 60%, 92%)', label: 'Rose Quartz' },
+  { value: 'hsl(190, 60%, 92%)', label: 'Ice Flow' },
+  { value: 'hsl(290, 45%, 92%)', label: 'Lilac Whisper' },
+  { value: 'hsl(10, 70%, 90%)', label: 'Coral Cloud' },
+  { value: 'hsl(80, 60%, 88%)', label: 'Limeade' },
+  { value: 'hsl(0, 0%, 95%)', label: 'Paper White' },
 ]
-const defaultColor = 'hsl(50, 90%, 55%)'
+const defaultColor = 'hsl(210, 60%, 92%)'
 
 type MeetingNotesProps = {
   lanes?: string[]
@@ -57,6 +51,7 @@ const MeetingNotes = ({
   const [draftContent, setDraftContent] = useState('')
   const [draftColor, setDraftColor] = useState(defaultColor)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const newNote = (): MeetingNote => ({
@@ -70,7 +65,7 @@ const MeetingNotes = ({
   })
 
   useEffect(() => {
-    const init = async () => {
+    const refreshNotes = async () => {
       try {
         const ctx = await loadDb()
         const loaded = listNotes(ctx.db)
@@ -82,7 +77,16 @@ const MeetingNotes = ({
         setLoading(false)
       }
     }
-    init()
+    refreshNotes()
+    const handleFocus = () => {
+      refreshNotes()
+    }
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+    }
   }, [])
 
   const filtered = useMemo(() => {
@@ -95,11 +99,19 @@ const MeetingNotes = ({
   }, [notes, search])
 
   const handleSave = async (note: MeetingNote) => {
-    const ctx = await loadDb()
-    saveNote(ctx.db, note)
-    await persistDb(ctx)
-    setNotes(listNotes(ctx.db))
-    setEditingId(null)
+    setSaving(true)
+    setError(null)
+    try {
+      const ctx = await loadDb()
+      saveNote(ctx.db, note)
+      await persistDb(ctx)
+      setNotes(listNotes(ctx.db))
+      setEditingId(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save meeting note.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const handleEdit = (note: MeetingNote) => {
@@ -131,6 +143,7 @@ const MeetingNotes = ({
       title: draftTitle.trim(),
       content: draftContent,
       color: draftColor,
+      meetingDate: note.meetingDate ?? note.createdAt ?? Date.now(),
       updatedAt: Date.now(),
     })
   }
@@ -269,9 +282,10 @@ const MeetingNotes = ({
                   const note = notes.find((n) => n.id === editingId)
                   if (note) handleSaveEdit(note)
                 }}
+                disabled={saving}
               >
                 <Check className="h-4 w-4 mr-2" />
-                Save
+                {saving ? 'Saving…' : 'Save'}
               </Button>
             </div>
           </div>

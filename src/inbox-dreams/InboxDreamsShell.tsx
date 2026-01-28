@@ -107,6 +107,24 @@ const getEffectiveDueDate = (story: Story) => {
   return upcoming ?? sorted[sorted.length - 1];
 };
 
+const parseStoryCodeNumber = (value?: string) => {
+  if (!value) return null;
+  const match = /^ST-(\d+)$/.exec(value.trim());
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const formatStoryCode = (value: number) => `ST-${String(value).padStart(3, "0")}`;
+
+const getNextStoryCode = (stories: Story[]) => {
+  const max = stories.reduce((current, story) => {
+    const value = parseStoryCodeNumber(story.storyCode);
+    return value && value > current ? value : current;
+  }, 0);
+  return formatStoryCode(max + 1);
+};
+
 const getAllDueDates = (story: Story) => {
   const dates =
     story.dueDates && story.dueDates.length > 0
@@ -130,6 +148,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   const [editingEpic, setEditingEpic] = useState<Epic | null>(null);
   const [isInboxModalOpen, setIsInboxModalOpen] = useState(false);
   const [modalActiveView, setModalActiveView] = useState("week");
+  const [isModalEpicsPaneCollapsed, setIsModalEpicsPaneCollapsed] = useState(true);
+  const [isHydrated, setIsHydrated] = useState(false);
   const [focusedOkr, setFocusedOkr] = useState<string | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowConfig>({
     columns: ["Backlog", "Scheduled", "On Hold / Waiting", "New", "To Ask", "To Do", "Done"],
@@ -191,6 +211,21 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     "Aligment Required",
     "Waiting for Answer",
   ]);
+  const persistTypeOfWorkOptions = useCallback(async (next: string[]) => {
+    setTypeOfWorkOptions(next);
+    const ctx = await loadDb();
+    const inboxState = loadInboxState(ctx.db);
+    saveInboxState(ctx.db, {
+      epics: inboxState.epics,
+      stories: inboxState.stories,
+      preferences: {
+        ...inboxState.preferences,
+        typeOfWorkOptions: next,
+      },
+    });
+    await persistDb(ctx);
+    window.dispatchEvent(new Event("inbox-stories-updated"));
+  }, []);
 
   const firstName = useMemo(() => {
     if (user.displayName) {
@@ -252,6 +287,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       setEpicsPaneWidth(clampPaneWidth(inboxState.preferences.epicsPaneWidth ?? 208));
       setIsEpicsPaneCollapsed(Boolean(inboxState.preferences.epicsPaneCollapsed));
       await persistDb(ctx);
+      setIsHydrated(true);
     };
     initConfig();
   }, []);
@@ -604,13 +640,17 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       const normalizedDueDates = (storyData.dueDates ?? [])
         .map((date) => (date instanceof Date ? date : new Date(date)))
         .filter((date) => !Number.isNaN(date.getTime()));
+      const storyCode = getNextStoryCode(stories);
+      const fallbackDueDates = storyData.isYearly ? [] : [new Date()];
+      const dueDates =
+        normalizedDueDates.length > 0 ? normalizedDueDates : fallbackDueDates;
       const newStory: Story = {
         ...storyData,
         id: String(Date.now()),
+        storyCode,
         key: `${epic?.key || "TASK"}-${epicStoryCount + 100}`,
         createdAt: new Date(),
-        dueDates:
-          normalizedDueDates.length > 0 ? normalizedDueDates : [new Date()],
+        dueDates,
         isYearly: Boolean(storyData.isYearly),
       };
       setStories((prev) => [...prev, newStory]);
@@ -638,14 +678,15 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       if (!defaultEpicId) return;
       const isYearly = view === "yearly";
       const nextStatus = "New";
-      const dueDates = isYearly
-        ? [new Date(`${format(new Date(), "yyyy-MM")}-01T00:00:00`)]
-        : [new Date()];
+      const now = new Date();
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const dueDates = isYearly ? [] : [new Date()];
       handleCreateStory({
         title: trimmedTitle,
         description: "",
         epicId: defaultEpicId,
         dueDates,
+        startDate: isYearly ? nextMonthStart : undefined,
         status: nextStatus,
         priority: "low",
         isYearly,
@@ -868,21 +909,25 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   }, []);
 
   useEffect(() => {
-    const ctx = dbContextRef.current;
-    if (!ctx) return;
-    saveInboxState(ctx.db, {
-      epics,
-      stories,
-      preferences: {
-        showArchived,
-        listPaneWidth,
-        calendarRightWidth,
-        epicsPaneWidth,
-        epicsPaneCollapsed: isEpicsPaneCollapsed,
-        typeOfWorkOptions,
-      },
-    });
-    persistDb(ctx);
+    if (!isHydrated) return;
+    const persistLatest = async () => {
+      const ctx = await loadDb();
+      dbContextRef.current = ctx;
+      saveInboxState(ctx.db, {
+        epics,
+        stories,
+        preferences: {
+          showArchived,
+          listPaneWidth,
+          calendarRightWidth,
+          epicsPaneWidth,
+          epicsPaneCollapsed: isEpicsPaneCollapsed,
+          typeOfWorkOptions,
+        },
+      });
+      await persistDb(ctx);
+    };
+    persistLatest();
   }, [
     epics,
     stories,
@@ -892,6 +937,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     epicsPaneWidth,
     isEpicsPaneCollapsed,
     typeOfWorkOptions,
+    isHydrated,
   ]);
   useEffect(() => {
     const handleExternalUpdate = async () => {
@@ -903,11 +949,32 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       setStories(normalized.stories);
       await persistDb(ctx);
     };
+    const handleOpenInboxStory = (event: Event) => {
+      const custom = event as CustomEvent<{ storyId?: string }>;
+      const storyId =
+        custom.detail?.storyId ??
+        window.sessionStorage.getItem("open-inbox-story-id") ??
+        "";
+      if (!storyId) return;
+      setIsInboxModalOpen(true);
+      setModalActiveView("week");
+      setSelectedStoryId(storyId);
+      window.sessionStorage.removeItem("open-inbox-story-id");
+    };
     window.addEventListener("inbox-stories-updated", handleExternalUpdate);
+    window.addEventListener("meeting-participants-updated", handleExternalUpdate);
+    window.addEventListener("open-inbox-story", handleOpenInboxStory as EventListener);
     return () => {
       window.removeEventListener("inbox-stories-updated", handleExternalUpdate);
+      window.removeEventListener("meeting-participants-updated", handleExternalUpdate);
+      window.removeEventListener("open-inbox-story", handleOpenInboxStory as EventListener);
     };
   }, []);
+  useEffect(() => {
+    if (isInboxModalOpen) {
+      setIsModalEpicsPaneCollapsed(true);
+    }
+  }, [isInboxModalOpen]);
   const calendarDays = useMemo(() => {
     const start = startOfWeek(startOfMonth(calendarMonth), { weekStartsOn: 0 });
     const end = endOfWeek(endOfMonth(calendarMonth), { weekStartsOn: 0 });
@@ -1667,6 +1734,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 }}
                 onStorageReady={handleStorageReady}
                 requiresStorageSetup={requiresStorageSetup}
+                typeOfWorkOptions={typeOfWorkOptions}
+                onPersistTypeOfWorkOptions={persistTypeOfWorkOptions}
               />
             ) : activeView === "notes" ? (
               <MeetingNotes lanes={workflow.columns} swimlanes={workflow.swimlanes} />
@@ -1692,19 +1761,45 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       >
         <DialogContent className="max-w-[98vw] h-[90vh] w-[1700px] overflow-hidden p-0">
           <div className="flex h-full min-h-0">
-            <div className="shrink-0">
-              <ListSidebar
-                epics={activeEpics}
-                selectedEpicId={selectedEpicId}
-                onSelectEpic={handleSelectEpic}
-                onCreateEpic={() => setIsCreateEpicOpen(true)}
-                storyCounts={modalStoryCounts}
-                activeView={modalActiveView}
-                onViewChange={setModalActiveView}
-                width={clampPaneWidth(epicsPaneWidth)}
-                onRenameEpic={handleRenameEpicFromSidebar}
-                onDeleteEpic={handleArchiveEpic}
-              />
+            <div className="relative flex h-full">
+              <button
+                type="button"
+                className="flex h-full w-6 flex-col items-center justify-start border border-panel-border bg-card/70 py-3 text-[10px] uppercase tracking-[0.2em] text-muted-foreground transition-all hover:bg-card"
+                onClick={() => setIsModalEpicsPaneCollapsed((prev) => !prev)}
+                title={isModalEpicsPaneCollapsed ? "Show epics list" : "Hide epics list"}
+              >
+                <span className="inline-block rotate-180 [writing-mode:vertical-rl]">
+                  {isModalEpicsPaneCollapsed ? "Show epics list" : "Hide epics list"}
+                </span>
+              </button>
+              <div
+                className={`flex items-stretch transition-all duration-200 ${
+                  isModalEpicsPaneCollapsed ? "w-0 opacity-0" : "opacity-100"
+                }`}
+              >
+                {!isModalEpicsPaneCollapsed && (
+                  <>
+                    <ListSidebar
+                      epics={activeEpics}
+                      selectedEpicId={selectedEpicId}
+                      onSelectEpic={handleSelectEpic}
+                      onCreateEpic={() => setIsCreateEpicOpen(true)}
+                      storyCounts={modalStoryCounts}
+                      activeView={modalActiveView}
+                      onViewChange={setModalActiveView}
+                      width={clampPaneWidth(epicsPaneWidth)}
+                      onRenameEpic={handleRenameEpicFromSidebar}
+                      onDeleteEpic={handleArchiveEpic}
+                    />
+                    <div
+                      className="w-1 cursor-col-resize bg-transparent hover:bg-border"
+                      onMouseDown={() => setIsResizingEpicsPane(true)}
+                      title="Resize epics pane"
+                    />
+                    <div className="w-px bg-panel-border" />
+                  </>
+                )}
+              </div>
             </div>
             <div className="shrink-0" style={{ width: modalListWidth }}>
               <StoryList
