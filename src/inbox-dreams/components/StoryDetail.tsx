@@ -92,31 +92,51 @@ export function StoryDetail({
   typeOfWorkOptions = [],
   onAddTypeOfWork,
 }: StoryDetailProps) {
+  const NO_EPIC_ID = "no-epic-assigned";
+  const NO_EPIC_NAME = "No Epic Assigned";
+  const DOC_EPIC_ID = "documentation-epic";
+  const DOC_EPIC_NAME = "Documentation";
+  const DOC_EPIC_LEGACY_NAME = "Documentation Epic";
+  const DOC_TYPE_OF_WORK = "Documentation";
+  const isDocumentationEpic = useMemo(() => {
+    const epicMatch = epics.find((item) => item.id === story.epicId);
+    return (
+      story.epicId === DOC_EPIC_ID ||
+      epicMatch?.name === DOC_EPIC_NAME ||
+      epicMatch?.name === DOC_EPIC_LEGACY_NAME
+    );
+  }, [epics, story.epicId]);
   const orderedStatusOptions = useMemo(() => {
-    const ordered = [
-      "On Hold / Waiting",
-      "New",
-      "To Ask",
-      "To Do",
-      "Scheduled",
-      "Backlog",
-      "Done",
-    ];
-    const remaining = statusOptions.filter((status) => !ordered.includes(status));
-    return [
-      ...ordered.filter((status) => statusOptions.includes(status)),
-      ...remaining,
-    ];
-  }, [statusOptions]);
+    if (isDocumentationEpic) {
+      return ["To Do", "Saved"];
+    }
+    return statusOptions;
+  }, [isDocumentationEpic, statusOptions]);
   const sortedEpics = useMemo(
-    () => epics.slice().sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
+    () =>
+      epics
+        .slice()
+        .sort((a, b) => {
+          const rank = (epic: Epic) => {
+            if (epic.id === NO_EPIC_ID || epic.name === NO_EPIC_NAME) return 0;
+            if (
+              epic.id === DOC_EPIC_ID ||
+              epic.name === DOC_EPIC_NAME ||
+              epic.name === DOC_EPIC_LEGACY_NAME
+            )
+              return 1;
+            return 2;
+          };
+          const rankA = rank(a);
+          const rankB = rank(b);
+          if (rankA !== rankB) return rankA - rankB;
+          if (rankA < 2) return 0;
+          return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+        }),
     [epics]
   );
   const sortedTypeOfWorkOptions = useMemo(
-    () =>
-      typeOfWorkOptions
-        .slice()
-        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+    () => typeOfWorkOptions,
     [typeOfWorkOptions]
   );
   const [title, setTitle] = useState(story.title);
@@ -132,6 +152,33 @@ export function StoryDetail({
   const [linkUrl, setLinkUrl] = useState("");
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false);
   const [customTypeValue, setCustomTypeValue] = useState("");
+  useEffect(() => {
+    if (!isDocumentationEpic) return;
+    const nextStatus = ["To Do", "Saved"].includes(story.status) ? story.status : "To Do";
+    const needsUpdate =
+      Boolean(story.startDate) ||
+      (story.dueDates?.length ?? 0) > 0 ||
+      story.priority !== "low" ||
+      story.typeOfWork !== DOC_TYPE_OF_WORK ||
+      story.status !== nextStatus;
+    if (!needsUpdate) return;
+    onUpdateStory({
+      ...story,
+      startDate: undefined,
+      dueDates: [],
+      priority: "low",
+      typeOfWork: DOC_TYPE_OF_WORK,
+      status: nextStatus,
+    });
+  }, [
+    isDocumentationEpic,
+    story.startDate,
+    story.dueDates,
+    story.priority,
+    story.typeOfWork,
+    story.status,
+    onUpdateStory,
+  ]);
 
   useEffect(() => {
     setTitle(story.title);
@@ -155,7 +202,7 @@ export function StoryDetail({
     setIsEditingDescription(false);
   };
 
-  const isCompleted = story.status === doneStatus;
+  const isCompleted = isDocumentationEpic ? story.status === "Saved" : story.status === doneStatus;
   const isYearly = dateMode === "month" || Boolean(story.isYearly);
   const effectiveDueDate = getEffectiveDueDate(story);
   const dueDates = getDueDates(story);
@@ -352,17 +399,19 @@ export function StoryDetail({
     <div className="w-full bg-card border-l border-panel-border flex flex-col h-full shrink-0 animate-slide-in-right">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-panel-border">
-        <div className="flex items-center gap-3">
-          <Checkbox
-            checked={isCompleted}
-            onCheckedChange={() => {
-              onUpdateStory({
-                ...story,
-                status: isCompleted ? defaultStatus : doneStatus,
-              });
-            }}
-            className="h-5 w-5"
-          />
+            <div className="flex items-center gap-3">
+              <Checkbox
+                checked={isCompleted}
+                onCheckedChange={() => {
+                  const nextDoneStatus = isDocumentationEpic ? "Saved" : doneStatus;
+                  const nextDefaultStatus = isDocumentationEpic ? "To Do" : defaultStatus;
+                  onUpdateStory({
+                    ...story,
+                    status: isCompleted ? nextDefaultStatus : nextDoneStatus,
+                  });
+                }}
+                className="h-5 w-5"
+              />
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-muted-foreground" />
             <span
@@ -420,8 +469,14 @@ export function StoryDetail({
                 onValueChange={(value) =>
                   onUpdateStory({ ...story, priority: value as Story["priority"] })
                 }
+                disabled={isDocumentationEpic}
               >
-                <SelectTrigger className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm">
+                <SelectTrigger
+                  className={cn(
+                    "h-7 w-full text-xs bg-card/90 border border-input shadow-sm",
+                    isDocumentationEpic && "opacity-60 cursor-not-allowed"
+                  )}
+                >
                   <SelectValue placeholder="Priority" />
                 </SelectTrigger>
                 <SelectContent>
@@ -435,7 +490,23 @@ export function StoryDetail({
               <p className="text-[11px] uppercase text-muted-foreground">Epic</p>
               <Select
                 value={story.epicId}
-                onValueChange={(value) => onUpdateStory({ ...story, epicId: value })}
+                onValueChange={(value) => {
+                  const epicMatch = epics.find((item) => item.id === value);
+                  const isDocEpic =
+                    value === DOC_EPIC_ID ||
+                    epicMatch?.name === DOC_EPIC_NAME ||
+                    epicMatch?.name === DOC_EPIC_LEGACY_NAME;
+                  if (isDocEpic) {
+                    onUpdateStory({
+                      ...story,
+                      epicId: value,
+                      typeOfWork: DOC_TYPE_OF_WORK,
+                      status: ["To Do", "Saved"].includes(story.status) ? story.status : "To Do",
+                    });
+                    return;
+                  }
+                  onUpdateStory({ ...story, epicId: value });
+                }}
               >
                 <SelectTrigger className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm">
                   <SelectValue placeholder="Epic" />
@@ -460,8 +531,14 @@ export function StoryDetail({
                   }
                   onUpdateStory({ ...story, typeOfWork: value });
                 }}
+                disabled={isDocumentationEpic}
               >
-                <SelectTrigger className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm">
+                <SelectTrigger
+                  className={cn(
+                    "h-7 w-full text-xs bg-card/90 border border-input shadow-sm",
+                    isDocumentationEpic && "opacity-60 cursor-not-allowed"
+                  )}
+                >
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
                 <SelectContent>
@@ -493,8 +570,12 @@ export function StoryDetail({
                       : undefined,
                   });
                 }}
-                  className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm"
-                />
+                disabled={isDocumentationEpic}
+                className={cn(
+                  "h-7 w-full text-xs bg-card/90 border border-input shadow-sm",
+                  isDocumentationEpic && "opacity-60 cursor-not-allowed"
+                )}
+              />
                 {story.startDate ? (
                   <Button
                     type="button"
@@ -504,6 +585,7 @@ export function StoryDetail({
                     onClick={() => {
                       onUpdateStory({ ...story, startDate: undefined });
                     }}
+                    disabled={isDocumentationEpic}
                     title="Clear start date"
                   >
                     <X className="h-4 w-4" />
@@ -548,7 +630,11 @@ export function StoryDetail({
                         );
                         onUpdateStory({ ...story, dueDates: next });
                       }}
-                      className="h-7 w-full text-xs bg-card/90 border border-input shadow-sm"
+                      disabled={isDocumentationEpic}
+                      className={cn(
+                        "h-7 w-full text-xs bg-card/90 border border-input shadow-sm",
+                        isDocumentationEpic && "opacity-60 cursor-not-allowed"
+                      )}
                     />
                       );
                     })()}
@@ -561,6 +647,7 @@ export function StoryDetail({
                         const next = dueDates.filter((_, idx) => idx !== index);
                         onUpdateStory({ ...story, dueDates: next });
                       }}
+                      disabled={isDocumentationEpic}
                       title="Remove due date"
                     >
                       <X className="h-4 w-4" />
@@ -579,6 +666,7 @@ export function StoryDetail({
                     const next = [...dueDates, nextDate];
                     onUpdateStory({ ...story, dueDates: next });
                   }}
+                  disabled={isDocumentationEpic}
                 >
                   <Plus className="h-3 w-3" /> {isYearly ? "Add month" : "Add date"}
                 </Button>

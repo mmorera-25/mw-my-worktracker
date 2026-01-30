@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { isToday } from "date-fns";
-import { ChevronDown, ChevronRight, Plus, MoreVertical, Trash2, RotateCcw, ListTodo, Inbox, CheckCircle, CalendarCheck, XCircle, HelpCircle, Pencil, Search, PauseCircle, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, MoreVertical, Trash2, RotateCcw, ListTodo, Inbox, CheckCircle, CalendarCheck, XCircle, HelpCircle, Pencil, Search, PauseCircle, Sparkles, Save } from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { StoryListItem } from "./StoryListItem";
 import { Input } from "@inbox/components/ui/input";
@@ -18,6 +18,7 @@ interface StoryListProps {
   statusOptions: string[];
   doneStatus: string;
   defaultStatus: string;
+  savedStatusIndex?: number;
   selectedStoryId: string | null;
   onSelectStory: (storyId: string) => void;
   onCreateStory: (title: string) => void;
@@ -50,6 +51,7 @@ interface DateGroupProps {
   epics: Epic[];
   doneStatus: string;
   defaultStatus: string;
+  isDocumentationStory: (story: Story) => boolean;
   selectedStoryId: string | null;
   dateMode?: "day" | "month";
   onSelectStory: (storyId: string) => void;
@@ -65,6 +67,7 @@ function StatusGroup({
   epics, 
   doneStatus,
   defaultStatus,
+  isDocumentationStory,
   selectedStoryId, 
   dateMode,
   onSelectStory, 
@@ -83,6 +86,7 @@ function StatusGroup({
     "To Do": <ListTodo className="w-4 h-4 text-muted-foreground" />,
     Backlog: <Inbox className="w-4 h-4 text-muted-foreground" />,
     Done: <CheckCircle className="w-4 h-4 text-muted-foreground" />,
+    Saved: <Save className="w-4 h-4 text-muted-foreground" />,
   };
   const getEffectiveDueDate = (story: Story) => {
     const dates = story.dueDates && story.dueDates.length > 0 ? story.dueDates : [story.createdAt];
@@ -140,9 +144,12 @@ function StatusGroup({
               dateMode={dateMode}
               onClick={() => onSelectStory(story.id)}
               onToggleComplete={() => {
+                const isDocStory = isDocumentationStory(story);
+                const storyDoneStatus = isDocStory ? "Saved" : doneStatus;
+                const storyDefaultStatus = isDocStory ? "To Do" : defaultStatus;
                 onUpdateStory({
                   ...story,
-                  status: story.status === doneStatus ? defaultStatus : doneStatus
+                  status: story.status === storyDoneStatus ? storyDefaultStatus : storyDoneStatus
                 });
               }}
               onPriorityChange={(priority) =>
@@ -158,7 +165,7 @@ function StatusGroup({
                 })
               }
               onDelete={() => onDeleteStory(story.id)}
-              doneStatus={doneStatus}
+              doneStatus={isDocumentationStory(story) ? "Saved" : doneStatus}
             />
           ))}
         </div>
@@ -173,6 +180,7 @@ export function StoryList({
   statusOptions,
   doneStatus,
   defaultStatus,
+  savedStatusIndex,
   selectedStoryId,
   onSelectStory,
   onCreateStory,
@@ -197,22 +205,36 @@ export function StoryList({
   onSearchChange,
 }: StoryListProps) {
   const [newStoryTitle, setNewStoryTitle] = useState("");
+  const DOC_EPIC_ID = "documentation-epic";
+  const DOC_EPIC_NAME = "Documentation";
+  const DOC_EPIC_LEGACY_NAME = "Documentation Epic";
   const isCompletedView = activeView === 'completed';
   const isTrashView = activeView === 'trash';
   const isSearchView = activeView === "search";
+  const isDocumentationStory = (story: Story) => {
+    const epic = epics.find((entry) => entry.id === story.epicId);
+    return (
+      story.epicId === DOC_EPIC_ID ||
+      epic?.name === DOC_EPIC_NAME ||
+      epic?.name === DOC_EPIC_LEGACY_NAME
+    );
+  };
 
   const groupedStories = useMemo(() => {
-    const orderedStatuses = [
-      "On Hold / Waiting",
-      "New",
-      "To Ask",
-      "To Do",
-      "Scheduled",
-      "Backlog",
-      "Done",
-    ];
-    const remaining = statusOptions.filter((status) => !orderedStatuses.includes(status));
-    const groups = [...orderedStatuses, ...remaining].map((status) => ({
+    const hasSaved = stories.some((story) => story.status === "Saved");
+    const baseStatuses = statusOptions.filter((status) => status !== "Saved");
+    const orderedStatuses = hasSaved
+      ? (() => {
+          const next = [...baseStatuses];
+          const index =
+            typeof savedStatusIndex === "number"
+              ? Math.min(Math.max(savedStatusIndex, 0), next.length)
+              : next.length;
+          next.splice(index, 0, "Saved");
+          return next;
+        })()
+      : baseStatuses;
+    const groups = orderedStatuses.map((status) => ({
       status,
       stories: [] as Story[],
     }));
@@ -229,7 +251,7 @@ export function StoryList({
       groups.push({ status: "Other", stories: extra });
     }
     return groups;
-  }, [stories, statusOptions]);
+  }, [stories, statusOptions, savedStatusIndex]);
 
   const handleAddStory = (e: React.KeyboardEvent) => {
     if (isSearchView) return;
@@ -298,9 +320,12 @@ export function StoryList({
                   dateMode={dateMode}
                   onClick={() => onSelectStory(story.id)}
                   onToggleComplete={() => {
+                    const isDocStory = isDocumentationStory(story);
+                    const storyDoneStatus = isDocStory ? "Saved" : doneStatus;
+                    const storyDefaultStatus = isDocStory ? "To Do" : defaultStatus;
                     onUpdateStory({
                       ...story,
-                      status: story.status === doneStatus ? defaultStatus : doneStatus
+                      status: story.status === storyDoneStatus ? storyDefaultStatus : storyDoneStatus
                     });
                   }}
                   onPriorityChange={(priority) =>
@@ -314,7 +339,7 @@ export function StoryList({
                   onPermanentDelete={() => onPermanentDelete(story.id)}
                   isTrashView={isTrashView}
                   isCompletedView={isCompletedView}
-                  doneStatus={doneStatus}
+                  doneStatus={isDocumentationStory(story) ? "Saved" : doneStatus}
                   onCompletedDateChange={(date) => onCompletedDateChange(story.id, date)}
                 />
               ))}
@@ -419,13 +444,18 @@ export function StoryList({
             epics={epics}
             doneStatus={doneStatus}
             defaultStatus={defaultStatus}
+            isDocumentationStory={isDocumentationStory}
             selectedStoryId={selectedStoryId}
             dateMode={dateMode}
             onSelectStory={onSelectStory}
             onUpdateStory={onUpdateStory}
             onDeleteStory={onDeleteStory}
             defaultExpanded={
-              isSearchView || (group.status !== "Done" && group.status !== "On Hold / Waiting")
+              isSearchView
+                ? group.status !== "Saved"
+                : group.status !== "Done" &&
+                  group.status !== "On Hold / Waiting" &&
+                  group.status !== "Saved"
             }
           />
         ))}

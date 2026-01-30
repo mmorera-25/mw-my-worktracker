@@ -82,6 +82,24 @@ export const backupDatabase = async (dir: FileSystemDirectoryHandle) => {
   await enforceRetention(backupsDir)
 }
 
+export const getLastBackup = async (dir: FileSystemDirectoryHandle) => {
+  try {
+    const backupsDir = await ensureBackupsDir(dir)
+    let latest: File | null = null
+    for await (const [, handle] of backupsDir.entries()) {
+      if (handle.kind !== 'file') continue
+      const file = await handle.getFile()
+      if (!file.name.endsWith('.db')) continue
+      if (!latest || file.lastModified > latest.lastModified) {
+        latest = file
+      }
+    }
+    return latest?.lastModified ? new Date(latest.lastModified).toISOString() : null
+  } catch {
+    return null
+  }
+}
+
 const enforceRetention = async (backupsDir: FileSystemDirectoryHandle, max = 10) => {
   const entries: { name: string; handle: FileSystemFileHandle }[] = []
   for await (const [name, handle] of backupsDir.entries()) {

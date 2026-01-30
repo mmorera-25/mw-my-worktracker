@@ -61,11 +61,20 @@ export function ListSidebar({
   onRenameEpic,
   onDeleteEpic,
 }: ListSidebarProps) {
+  const DOC_EPIC_ID = "documentation-epic";
+  const DOC_EPIC_NAME = "Documentation";
+  const DOC_EPIC_LEGACY_NAME = "Documentation Epic";
   const noEpic = epics.find(
     (epic) => epic.id === "no-epic-assigned" || epic.name === "No Epic Assigned"
   );
+  const docEpic = epics.find(
+    (epic) =>
+      epic.id === DOC_EPIC_ID ||
+      epic.name === DOC_EPIC_NAME ||
+      epic.name === DOC_EPIC_LEGACY_NAME
+  );
   const orderedEpics = epics
-    .filter((epic) => epic !== noEpic)
+    .filter((epic) => epic !== noEpic && epic !== docEpic)
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
 
@@ -117,8 +126,52 @@ export function ListSidebar({
           </div>
         ) : null}
 
+        {docEpic ? (
+          <div
+            key={docEpic.id}
+            className={cn(
+              "group flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-hover-overlay",
+              selectedEpicId === docEpic.id && "bg-selected-bg text-primary font-medium"
+            )}
+          >
+            <button
+              type="button"
+              className="flex flex-1 min-w-0 items-center gap-3 text-left"
+              onClick={() => onSelectEpic(docEpic.id)}
+            >
+              <span
+                className="shrink-0 text-xs font-semibold uppercase"
+                style={{ color: docEpic.color }}
+              >
+                {docEpic.key.slice(0, 3)}
+              </span>
+              <span className="flex-1 min-w-0 truncate">{docEpic.name}</span>
+              <span className="w-6 text-right text-xs text-muted-foreground tabular-nums">
+                {storyCounts[docEpic.id] || 0}
+              </span>
+            </button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="invisible h-6 w-6"
+              disabled
+              aria-hidden="true"
+              tabIndex={-1}
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : null}
+
         {/* Epic Items */}
-        {orderedEpics.map((epic) => (
+        {orderedEpics.map((epic) => {
+          const isSystemEpic =
+            epic.id === "no-epic-assigned" ||
+            epic.name === "No Epic Assigned" ||
+            epic.id === DOC_EPIC_ID ||
+            epic.name === DOC_EPIC_NAME ||
+            epic.name === DOC_EPIC_LEGACY_NAME;
+          return (
           <div
             key={epic.id}
             className={cn(
@@ -142,36 +195,50 @@ export function ListSidebar({
                 {storyCounts[epic.id] || 0}
               </span>
             </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-muted-foreground opacity-0 group-hover:opacity-100"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <MoreVertical className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => onRenameEpic?.(epic.id)}
-                  disabled={!onRenameEpic}
-                >
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Rename
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => onDeleteEpic?.(epic.id)}
-                  disabled={!onDeleteEpic}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {isSystemEpic ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="invisible h-6 w-6"
+                disabled
+                aria-hidden="true"
+                tabIndex={-1}
+              >
+                <MoreVertical className="h-3.5 w-3.5" />
+              </Button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground opacity-0 group-hover:opacity-100"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <MoreVertical className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => onRenameEpic?.(epic.id)}
+                    disabled={!onRenameEpic}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Rename
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => onDeleteEpic?.(epic.id)}
+                    disabled={!onDeleteEpic}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
-        ))}
+          );
+        })}
 
         <Button
           onClick={onCreateEpic}

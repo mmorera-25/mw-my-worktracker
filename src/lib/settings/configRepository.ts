@@ -4,12 +4,14 @@ export type WorkflowConfig = {
   columns: string[]
   swimlanes: string[]
   accent: 'indigo' | 'teal'
+  savedStatusIndex?: number
 }
 
 const defaultConfig: WorkflowConfig = {
   columns: ['Backlog', 'Scheduled', 'On Hold / Waiting', 'New', 'To Ask', 'To Do', 'Done'],
   swimlanes: ['Core', 'Enablement', 'Bugs'],
   accent: 'indigo',
+  savedStatusIndex: undefined,
 }
 
 const get_json = (db: Database, key: string) => {
@@ -73,11 +75,16 @@ export const loadWorkflowConfig = (db: Database): WorkflowConfig => {
   }
   const swimlanes = get_json(db, 'kanban_swimlanes') ?? defaultConfig.swimlanes
   const accent = (get_json(db, 'accent_color') as WorkflowConfig['accent'] | null) ?? 'indigo'
-  return { columns, swimlanes, accent }
+  const savedStatusIndex =
+    (get_json(db, 'saved_status_index') as number | null) ?? defaultConfig.savedStatusIndex
+  return { columns, swimlanes, accent, savedStatusIndex }
 }
 
 export const saveWorkflowConfig = (db: Database, config: WorkflowConfig) => {
   set_json(db, 'kanban_columns', config.columns)
   set_json(db, 'kanban_swimlanes', config.swimlanes)
   set_json(db, 'accent_color', config.accent)
+  if (typeof config.savedStatusIndex === 'number') {
+    set_json(db, 'saved_status_index', config.savedStatusIndex)
+  }
 }

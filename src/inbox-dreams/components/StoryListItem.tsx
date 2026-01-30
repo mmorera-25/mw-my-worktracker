@@ -355,7 +355,7 @@ export function StoryListItem({
                         onDueDateChange?.(nextDate);
                       }}
                       className="due-date-input absolute inset-0 z-10 h-full w-full cursor-pointer"
-                      aria-hidden="true"
+                      aria-label={boxLabel}
                       disabled={!onDueDateChange}
                     />
                   )}
