@@ -19,6 +19,7 @@ import { setAccentColor } from "../theme/applyTheme";
 import { loadInboxState, saveInboxState } from "@inbox/data/inboxRepository";
 import {
   addDays,
+  addWeeks,
   endOfMonth,
   endOfWeek,
   format,
@@ -226,9 +227,12 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   );
   const [listPaneWidth, setListPaneWidth] = useState(INBOX_LIST_WIDTH);
   const [isResizingListPane, setIsResizingListPane] = useState(false);
-  const [showDueTodayOnly, setShowDueTodayOnly] = useState(false);
-  const [showDueThisWeekOnly, setShowDueThisWeekOnly] = useState(false);
+  const [dueFilter, setDueFilter] = useState<"all" | "today" | "next-week">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [typeOfWorkFilters, setTypeOfWorkFilters] = useState<string[]>([]);
+  const statusFiltersInitialized = useRef(false);
+  const typeFiltersInitialized = useRef(false);
   const [calendarRightWidth, setCalendarRightWidth] = useState(320);
   const [isResizingCalendarRight, setIsResizingCalendarRight] = useState(false);
   const [epicsPaneWidth, setEpicsPaneWidth] = useState(208);
@@ -359,6 +363,63 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     return didNormalize ? next : stories;
   }, [stories, getStoryEpicBucketId]);
 
+  const statusUsageCounts = useMemo(() => {
+    return normalizedStories
+      .filter((story) => !story.isDeleted)
+      .reduce<Record<string, number>>((acc, story) => {
+        acc[story.status] = (acc[story.status] ?? 0) + 1;
+        return acc;
+      }, {});
+  }, [normalizedStories]);
+
+  const allStatusOptions = useMemo(() => {
+    const options = statusOptions.filter((status) => status !== "Saved");
+    const hasSaved = normalizedStories.some((story) => story.status === "Saved");
+    const merged = hasSaved ? [...options, "Saved"] : options;
+    return Array.from(new Set(merged));
+  }, [normalizedStories, statusOptions]);
+
+  const allStatusFilterOptions = useMemo(() => {
+    const storyStatuses = normalizedStories.map((story) => story.status).filter(Boolean);
+    return Array.from(new Set([...allStatusOptions, ...storyStatuses]));
+  }, [allStatusOptions, normalizedStories]);
+
+  const allTypeFilterOptions = useMemo(() => {
+    const storyTypes = normalizedStories
+      .map((story) => story.typeOfWork?.trim())
+      .filter((value): value is string => Boolean(value));
+    return Array.from(new Set([...typeOfWorkOptions, ...storyTypes, "__unassigned__"]));
+  }, [typeOfWorkOptions, normalizedStories]);
+
+  useEffect(() => {
+    if (statusFiltersInitialized.current) return;
+    const defaultFilters = allStatusOptions.filter(
+      (status) =>
+        status !== doneStatus &&
+        status !== "Saved" &&
+        status !== "Backlog"
+    );
+    setStatusFilters(defaultFilters);
+    statusFiltersInitialized.current = true;
+  }, [allStatusOptions, doneStatus]);
+
+  useEffect(() => {
+    if (typeFiltersInitialized.current) return;
+    setTypeOfWorkFilters([...typeOfWorkOptions, "__unassigned__"]);
+    typeFiltersInitialized.current = true;
+  }, [typeOfWorkOptions]);
+
+  const typeUsageCounts = useMemo(() => {
+    return normalizedStories
+      .filter((story) => !story.isDeleted)
+      .reduce<Record<string, number>>((acc, story) => {
+        const key = story.typeOfWork?.trim();
+        if (!key) return acc;
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {});
+  }, [normalizedStories]);
+
   const yearlyStories = useMemo(
     () => normalizedStories.filter((story) => story.isYearly),
     [normalizedStories]
@@ -421,21 +482,37 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
           return content.some((entry) => entry.includes(term));
         });
       }
+      if (view === "week" || view === "yearly") {
+        if (statusFilters.length === 0) {
+          result = [];
+        } else {
+          result = result.filter((story) => statusFilters.includes(story.status));
+        }
+        if (typeOfWorkFilters.length === 0) {
+          result = [];
+        } else {
+          result = result.filter((story) => {
+            const value = story.typeOfWork?.trim();
+            if (!value) return typeOfWorkFilters.includes("__unassigned__");
+            return typeOfWorkFilters.includes(value);
+          });
+        }
+      }
       if (view === "week") {
-        if (showDueTodayOnly) {
+        if (dueFilter === "today") {
           const today = new Date();
           result = result.filter(
             (story) =>
               story.dueDates?.some((date) => isSameDay(date, today)) ?? false
           );
-        } else if (showDueThisWeekOnly) {
+        } else if (dueFilter === "next-week") {
           const today = new Date();
-          const weekStart = startOfWeek(today, { weekStartsOn: 0 });
-          const weekEnd = endOfWeek(today, { weekStartsOn: 0 });
+          const nextWeekStart = startOfWeek(addWeeks(today, 1), { weekStartsOn: 0 });
+          const nextWeekEnd = endOfWeek(addWeeks(today, 1), { weekStartsOn: 0 });
           result = result.filter(
             (story) =>
               story.dueDates?.some(
-                (date) => date >= weekStart && date <= weekEnd
+                (date) => date >= nextWeekStart && date <= nextWeekEnd
               ) ?? false
           );
         }
@@ -446,9 +523,10 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     [
       normalizedStories,
       selectedEpicId,
-      showDueTodayOnly,
-      showDueThisWeekOnly,
       searchQuery,
+      statusFilters,
+      typeOfWorkFilters,
+      dueFilter,
       yearlyStories,
       regularStories,
     ]
@@ -555,8 +633,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         setSelectedStoryId(null);
       }
       if (view !== "week") {
-        setShowDueTodayOnly(false);
-        setShowDueThisWeekOnly(false);
+        setDueFilter("all");
       }
     },
     [requiresStorageSetup]
@@ -1180,6 +1257,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
               }}
               onStorageReady={handleStorageReady}
               requiresStorageSetup={requiresStorageSetup}
+              statusUsageCounts={statusUsageCounts}
+              typeUsageCounts={typeUsageCounts}
             />
           </div>
         </div>
@@ -1700,6 +1779,13 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 doneStatus={doneStatus}
                 defaultStatus={defaultStatus}
                 savedStatusIndex={workflow.savedStatusIndex}
+                statusFilters={statusFilters}
+                typeOfWorkFilters={typeOfWorkFilters}
+                onStatusFiltersChange={setStatusFilters}
+                onTypeOfWorkFiltersChange={setTypeOfWorkFilters}
+                typeOfWorkOptions={typeOfWorkOptions}
+                statusFilterOptions={allStatusFilterOptions}
+                typeFilterOptions={allTypeFilterOptions}
                 selectedStoryId={selectedStoryId}
                 onSelectStory={setSelectedStoryId}
                 onCreateStory={(title) => handleQuickAddStory(title, activeView)}
@@ -1711,28 +1797,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 viewTitle={getViewTitle()}
                 activeView={activeView}
                 dateMode={dateMode}
-                showDueTodayToggle={activeView === "week"}
-                isDueTodayActive={showDueTodayOnly}
-                onToggleDueToday={() => {
-                  setShowDueTodayOnly((prev) => {
-                    const next = !prev;
-                    if (next) setShowDueThisWeekOnly(false);
-                    return next;
-                  });
-                }}
-                showDueWeekToggle={activeView === "week"}
-                isDueWeekActive={showDueThisWeekOnly}
-                onToggleDueWeek={() => {
-                  setShowDueThisWeekOnly((prev) => {
-                    const next = !prev;
-                    if (next) setShowDueTodayOnly(false);
-                    return next;
-                  });
-                }}
-                onClearDueFilters={() => {
-                  setShowDueTodayOnly(false);
-                  setShowDueThisWeekOnly(false);
-                }}
+                dueFilter={dueFilter}
+                onDueFilterChange={setDueFilter}
                 canRenameEpic={
                   Boolean(selectedEpicId) &&
                   selectedEpicId !== "no-epic-assigned" &&
@@ -1809,6 +1875,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 requiresStorageSetup={requiresStorageSetup}
                 typeOfWorkOptions={typeOfWorkOptions}
                 onPersistTypeOfWorkOptions={persistTypeOfWorkOptions}
+                statusUsageCounts={statusUsageCounts}
+                typeUsageCounts={typeUsageCounts}
               />
             ) : activeView === "notes" ? (
               <MeetingNotes lanes={workflow.columns} swimlanes={workflow.swimlanes} />
@@ -1882,6 +1950,13 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 doneStatus={doneStatus}
                 defaultStatus={defaultStatus}
                 savedStatusIndex={workflow.savedStatusIndex}
+                statusFilters={statusFilters}
+                typeOfWorkFilters={typeOfWorkFilters}
+                onStatusFiltersChange={setStatusFilters}
+                onTypeOfWorkFiltersChange={setTypeOfWorkFilters}
+                typeOfWorkOptions={typeOfWorkOptions}
+                statusFilterOptions={allStatusFilterOptions}
+                typeFilterOptions={allTypeFilterOptions}
                 selectedStoryId={selectedStoryId}
                 onSelectStory={setSelectedStoryId}
                 onCreateStory={(title) => handleQuickAddStory(title, modalActiveView)}
@@ -1893,28 +1968,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
                 viewTitle={modalViewTitle}
                 activeView={modalActiveView}
                 dateMode={modalDateMode}
-                showDueTodayToggle={modalActiveView === "week"}
-                isDueTodayActive={showDueTodayOnly}
-                onToggleDueToday={() => {
-                  setShowDueTodayOnly((prev) => {
-                    const next = !prev;
-                    if (next) setShowDueThisWeekOnly(false);
-                    return next;
-                  });
-                }}
-                showDueWeekToggle={modalActiveView === "week"}
-                isDueWeekActive={showDueThisWeekOnly}
-                onToggleDueWeek={() => {
-                  setShowDueThisWeekOnly((prev) => {
-                    const next = !prev;
-                    if (next) setShowDueTodayOnly(false);
-                    return next;
-                  });
-                }}
-                onClearDueFilters={() => {
-                  setShowDueTodayOnly(false);
-                  setShowDueThisWeekOnly(false);
-                }}
+                dueFilter={dueFilter}
+                onDueFilterChange={setDueFilter}
                 canRenameEpic={
                   Boolean(selectedEpicId) &&
                   selectedEpicId !== "no-epic-assigned" &&

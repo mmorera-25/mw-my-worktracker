@@ -5,6 +5,7 @@ import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
 import Dialog from '../../components/ui/Dialog'
 import type { WorkflowConfig } from '../../lib/settings/configRepository'
+import type { Story } from '../../inbox-dreams/types'
 import {
   backupDatabase,
   ensureDatabase,
@@ -18,6 +19,7 @@ import { loadFromIdb, saveToIdb } from '../../lib/storage/idbFallback'
 import { openDatabase, serialize } from '../../lib/storage/sqliteWasm'
 import { bootstrapSchema } from '../../lib/storage/schema'
 import { loadDb } from '../../lib/storage/dbManager'
+import { loadInboxState, saveInboxState } from '../../inbox-dreams/data/inboxRepository'
 import { downloadLatestEncryptedBackup, uploadEncryptedBackup } from '../../lib/storage/cloudBackup'
 import { auth } from '../../firebase'
 import { onAuthStateChanged, type User } from 'firebase/auth'
@@ -43,6 +45,8 @@ type Props = {
   onUpdateWorkflow: (config: WorkflowConfig) => Promise<void> | void
   typeOfWorkOptions: string[]
   onPersistTypeOfWorkOptions: (next: string[]) => Promise<void> | void
+  statusUsageCounts?: Record<string, number>
+  typeUsageCounts?: Record<string, number>
   onStorageReady?: () => void
   requiresStorageSetup?: boolean
 }
@@ -52,6 +56,8 @@ const DataStoragePanel = ({
   onUpdateWorkflow,
   typeOfWorkOptions,
   onPersistTypeOfWorkOptions,
+  statusUsageCounts = {},
+  typeUsageCounts = {},
   onStorageReady,
   requiresStorageSetup = false,
 }: Props) => {
@@ -74,6 +80,7 @@ const DataStoragePanel = ({
   const [newSwimlaneLabel, setNewSwimlaneLabel] = useState('')
   const [newTypeLabel, setNewTypeLabel] = useState('')
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [storiesSnapshot, setStoriesSnapshot] = useState<Story[]>([])
   const [laneMessage, setLaneMessage] = useState<string | null>(null)
   const [typeMessage, setTypeMessage] = useState<string | null>(null)
   const [savingWorkflow, setSavingWorkflow] = useState(false)
@@ -153,6 +160,18 @@ const DataStoragePanel = ({
     }
   }, [requiresStorageSetup])
   useEffect(() => onAuthStateChanged(auth, setCloudUser), [])
+  useEffect(() => {
+    const loadStories = async () => {
+      try {
+        const ctx = await loadDb()
+        const inboxState = loadInboxState(ctx.db)
+        setStoriesSnapshot(inboxState.stories ?? [])
+      } catch {
+        setStoriesSnapshot([])
+      }
+    }
+    loadStories()
+  }, [])
   useEffect(() => {
     setLastBackup(window.localStorage.getItem(lastLocalBackupKey))
     setLastCloudBackup(window.localStorage.getItem(lastCloudBackupKey))
@@ -329,6 +348,16 @@ const DataStoragePanel = ({
         accent,
         savedStatusIndex: clampedSavedIndex,
       }
+      if (storiesSnapshot.length > 0) {
+        const ctx = await loadDb()
+        const inboxState = loadInboxState(ctx.db)
+        saveInboxState(ctx.db, {
+          epics: inboxState.epics,
+          stories: storiesSnapshot,
+          preferences: inboxState.preferences,
+        })
+        await persistDb(ctx)
+      }
       await onUpdateWorkflow(next)
       await onPersistTypeOfWorkOptions(normalizedTypes)
       setMessage('Workflow updated.')
@@ -370,6 +399,11 @@ const DataStoragePanel = ({
       setStatusMessage('A status with that name already exists.')
       return
     }
+    setStoriesSnapshot((prev) =>
+      prev.map((story) =>
+        story.status === current ? { ...story, status: nextLabel } : story,
+      ),
+    )
     setColumns((prev) => prev.map((item, idx) => (idx === index ? nextLabel : item)))
     setStatusMessage(null)
   }
@@ -379,7 +413,13 @@ const DataStoragePanel = ({
       setStatusMessage('You need at least one status.')
       return
     }
-    if (!window.confirm(`Delete "${columns[index]}"?`)) return
+    const label = columns[index]
+    const usage = statusUsageCounts[label] ?? 0
+    if (usage > 0) {
+      setStatusMessage(`Cannot delete "${label}" while ${usage} stor${usage === 1 ? 'y' : 'ies'} use it.`)
+      return
+    }
+    if (!window.confirm(`Delete "${label}"?`)) return
     setColumns((prev) => prev.filter((_, idx) => idx !== index))
   }
 
@@ -438,12 +478,23 @@ const DataStoragePanel = ({
       setTypeMessage('An option with that name already exists.')
       return
     }
+    setStoriesSnapshot((prev) =>
+      prev.map((story) =>
+        story.typeOfWork === current ? { ...story, typeOfWork: nextLabel } : story,
+      ),
+    )
     setTypeOptions((prev) => prev.map((item, idx) => (idx === index ? nextLabel : item)))
     setTypeMessage(null)
   }
 
   const deleteTypeLabel = (index: number) => {
-    if (!window.confirm(`Delete option "${typeOptions[index]}"?`)) return
+    const label = typeOptions[index]
+    const usage = typeUsageCounts[label] ?? 0
+    if (usage > 0) {
+      setTypeMessage(`Cannot delete "${label}" while ${usage} stor${usage === 1 ? 'y' : 'ies'} use it.`)
+      return
+    }
+    if (!window.confirm(`Delete option "${label}"?`)) return
     setTypeOptions((prev) => prev.filter((_, idx) => idx !== index))
   }
 
@@ -862,7 +913,7 @@ const DataStoragePanel = ({
             <div className="rounded-2xl border border-panel-border bg-surface-2/70 p-3 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Epic status</p>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Story status</p>
                   <p className="text-[11px] text-text-secondary">Drag to reorder, rename, or remove.</p>
                 </div>
                 <span className="text-[11px] text-muted-foreground tabular-nums">
@@ -897,6 +948,9 @@ const DataStoragePanel = ({
                           Documentation only
                         </span>
                       ) : null}
+                    </span>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      {statusUsageCounts[col] ?? 0}
                     </span>
                     <div className={`flex gap-1 ${isSaved ? 'opacity-40' : ''}`}>
                       <Button
@@ -976,6 +1030,9 @@ const DataStoragePanel = ({
                   >
                     <GripVertical className="h-4 w-4 text-muted-foreground" />
                     <span className="flex-1 truncate font-medium text-text-primary">{value}</span>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      {typeUsageCounts[value] ?? 0}
+                    </span>
                     <div className="flex gap-1">
                       <Button
                         size="icon"

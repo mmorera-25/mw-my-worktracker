@@ -1,14 +1,17 @@
 import { useState, useMemo } from "react";
 import { isToday } from "date-fns";
-import { ChevronDown, ChevronRight, Plus, MoreVertical, Trash2, RotateCcw, ListTodo, Inbox, CheckCircle, CalendarCheck, XCircle, HelpCircle, Pencil, Search, PauseCircle, Sparkles, Save } from "lucide-react";
+import { ChevronDown, ChevronRight, Plus, Trash2, RotateCcw, ListTodo, Inbox, CheckCircle, CalendarCheck, XCircle, HelpCircle, Pencil, Search, PauseCircle, Sparkles, Save } from "lucide-react";
 import { Story, Epic } from "@inbox/types";
 import { StoryListItem } from "./StoryListItem";
 import { Input } from "@inbox/components/ui/input";
 import { Button } from "@inbox/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@inbox/components/ui/dropdown-menu";
 
@@ -19,6 +22,13 @@ interface StoryListProps {
   doneStatus: string;
   defaultStatus: string;
   savedStatusIndex?: number;
+  statusFilters: string[];
+  typeOfWorkFilters: string[];
+  onStatusFiltersChange: (value: string[]) => void;
+  onTypeOfWorkFiltersChange: (value: string[]) => void;
+  typeOfWorkOptions: string[];
+  statusFilterOptions: string[];
+  typeFilterOptions: string[];
   selectedStoryId: string | null;
   onSelectStory: (storyId: string) => void;
   onCreateStory: (title: string) => void;
@@ -31,13 +41,10 @@ interface StoryListProps {
   viewTitle: string;
   activeView: string;
   dateMode?: "day" | "month";
-  showDueTodayToggle?: boolean;
-  isDueTodayActive?: boolean;
-  onToggleDueToday?: () => void;
-  showDueWeekToggle?: boolean;
-  isDueWeekActive?: boolean;
-  onToggleDueWeek?: () => void;
-  onClearDueFilters?: () => void;
+  dueFilter: "all" | "today" | "next-week";
+  onDueFilterChange: (value: "all" | "today" | "next-week") => void;
+  dueFilter: "all" | "today" | "next-week";
+  onDueFilterChange: (value: "all" | "today" | "next-week") => void;
   canRenameEpic?: boolean;
   onRenameEpic?: () => void;
   searchQuery?: string;
@@ -181,6 +188,13 @@ export function StoryList({
   doneStatus,
   defaultStatus,
   savedStatusIndex,
+  statusFilters,
+  typeOfWorkFilters,
+  onStatusFiltersChange,
+  onTypeOfWorkFiltersChange,
+  typeOfWorkOptions,
+  statusFilterOptions,
+  typeFilterOptions,
   selectedStoryId,
   onSelectStory,
   onCreateStory,
@@ -192,13 +206,8 @@ export function StoryList({
   viewTitle,
   activeView,
   dateMode = "day",
-  showDueTodayToggle,
-  isDueTodayActive,
-  onToggleDueToday,
-  showDueWeekToggle,
-  isDueWeekActive,
-  onToggleDueWeek,
-  onClearDueFilters,
+  dueFilter,
+  onDueFilterChange,
   canRenameEpic,
   onRenameEpic,
   searchQuery,
@@ -211,6 +220,16 @@ export function StoryList({
   const isCompletedView = activeView === 'completed';
   const isTrashView = activeView === 'trash';
   const isSearchView = activeView === "search";
+  const showStatusFilters = activeView === "week" || activeView === "yearly";
+  const showDueFilter = activeView === "week";
+  const hasActiveFilters =
+    (showStatusFilters &&
+      statusFilters.length !== statusFilterOptions.length) ||
+    (showStatusFilters &&
+      typeOfWorkFilters.length !== typeFilterOptions.length) ||
+    (showDueFilter && dueFilter !== "all");
+  const selectedStatusCount = statusFilters.length;
+  const selectedTypeCount = typeOfWorkFilters.length;
   const isDocumentationStory = (story: Story) => {
     const epic = epics.find((entry) => entry.id === story.epicId);
     return (
@@ -361,46 +380,170 @@ export function StoryList({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {(isDueTodayActive || isDueWeekActive) && (
+            {((dueFilter !== "all") || hasActiveFilters) && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-8 gap-1.5 px-2 text-xs text-muted-foreground hover:text-foreground"
-                onClick={onClearDueFilters}
+                className="h-8 w-8 px-0 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  onStatusFiltersChange(statusFilterOptions);
+                  onTypeOfWorkFiltersChange(typeFilterOptions);
+                  onDueFilterChange("all");
+                }}
                 title="Clear filters"
               >
                 <XCircle className="h-4 w-4" />
-                Clear filters
               </Button>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {showDueTodayToggle && (
-                  <DropdownMenuItem onClick={onToggleDueToday}>
-                    <CalendarCheck className="mr-2 h-4 w-4" />
-                    {isDueTodayActive ? "Show all stories" : "Due today"}
-                  </DropdownMenuItem>
-                )}
-                {showDueWeekToggle && (
-                  <DropdownMenuItem onClick={onToggleDueWeek}>
-                    <CalendarCheck className="mr-2 h-4 w-4" />
-                    {isDueWeekActive ? "Show all stories" : "Due this week"}
-                  </DropdownMenuItem>
-                )}
-                {canRenameEpic && onRenameEpic && (
-                  <DropdownMenuItem onClick={onRenameEpic}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Rename
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {showStatusFilters ? (
+              <>
+                {showDueFilter ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 px-2 text-xs">
+                        Due
+                        <span className="ml-1 text-[10px] text-muted-foreground">
+                          {dueFilter === "all"
+                            ? "All"
+                            : dueFilter === "today"
+                            ? "Today"
+                            : "Next week"}
+                        </span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <div className="flex items-center justify-between px-2 py-1.5">
+                        <DropdownMenuLabel className="px-0 py-0">Due</DropdownMenuLabel>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-[11px]"
+                          onClick={() => onDueFilterChange("all")}
+                        >
+                          All
+                        </Button>
+                      </div>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => onDueFilterChange("today")}>
+                        Today
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onDueFilterChange("next-week")}>
+                        Next week
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 px-2 text-xs">
+                      Status
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        {selectedStatusCount}
+                      </span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <div className="flex items-center justify-between px-2 py-1.5">
+                      <DropdownMenuLabel className="px-0 py-0">Status</DropdownMenuLabel>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[11px]"
+                        onClick={() => {
+                          if (statusFilters.length === statusFilterOptions.length) {
+                            onStatusFiltersChange([]);
+                          } else {
+                            onStatusFiltersChange(statusFilterOptions);
+                          }
+                        }}
+                      >
+                        {statusFilters.length === statusFilterOptions.length ? "None" : "All"}
+                      </Button>
+                    </div>
+                    <DropdownMenuSeparator />
+                    {statusFilterOptions.map((status) => (
+                      <DropdownMenuCheckboxItem
+                        key={status}
+                        checked={statusFilters.includes(status)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            onStatusFiltersChange([...statusFilters, status]);
+                          } else {
+                            onStatusFiltersChange(
+                              statusFilters.filter((item) => item !== status)
+                            );
+                          }
+                        }}
+                      >
+                        {status}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 px-2 text-xs">
+                      Type
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        {selectedTypeCount}
+                      </span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <div className="flex items-center justify-between px-2 py-1.5">
+                      <DropdownMenuLabel className="px-0 py-0">Type of work</DropdownMenuLabel>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[11px]"
+                        onClick={() => {
+                          if (typeOfWorkFilters.length === typeFilterOptions.length) {
+                            onTypeOfWorkFiltersChange([]);
+                          } else {
+                            onTypeOfWorkFiltersChange(typeFilterOptions);
+                          }
+                        }}
+                      >
+                        {typeOfWorkFilters.length === typeFilterOptions.length ? "None" : "All"}
+                      </Button>
+                    </div>
+                    <DropdownMenuSeparator />
+                    {typeFilterOptions.map((option) => (
+                      <DropdownMenuCheckboxItem
+                        key={option}
+                        checked={typeOfWorkFilters.includes(option)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            onTypeOfWorkFiltersChange([...typeOfWorkFilters, option]);
+                          } else {
+                            onTypeOfWorkFiltersChange(
+                              typeOfWorkFilters.filter((item) => item !== option)
+                            );
+                          }
+                        }}
+                      >
+                        {option === "__unassigned__" ? "Unassigned" : option}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : null}
+            {canRenameEpic && onRenameEpic ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={onRenameEpic}
+              >
+                Rename
+              </Button>
+            ) : null}
           </div>
         </div>
 
