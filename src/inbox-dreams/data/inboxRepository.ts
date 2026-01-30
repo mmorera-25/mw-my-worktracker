@@ -4,7 +4,6 @@ import type { Epic, Story, StoryComment } from "@inbox/types";
 export type InboxPreferences = {
   showArchived?: boolean;
   listPaneWidth?: number;
-  calendarRightWidth?: number;
   epicsPaneWidth?: number;
   epicsPaneCollapsed?: boolean;
   typeOfWorkOptions?: string[];

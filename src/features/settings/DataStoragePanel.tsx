@@ -4,7 +4,8 @@ import Card from '../../components/ui/Card'
 import Input from '../../components/ui/Input'
 import Select from '../../components/ui/Select'
 import Dialog from '../../components/ui/Dialog'
-import type { WorkflowConfig } from '../../lib/settings/configRepository'
+import type { KanbanBucket, WorkflowConfig } from '../../lib/settings/configRepository'
+import { KANBAN_BUCKETS, inferKanbanBucket, normalizeKanbanBuckets } from '../../lib/settings/configRepository'
 import type { Story } from '../../inbox-dreams/types'
 import {
   backupDatabase,
@@ -73,15 +74,15 @@ const DataStoragePanel = ({
   const [savedStatusIndex, setSavedStatusIndex] = useState<number>(
     workflow.savedStatusIndex ?? workflow.columns.length,
   )
-  const [swimlanes, setSwimlanes] = useState<string[]>(workflow.swimlanes)
   const [accent, setAccent] = useState<WorkflowConfig['accent']>(workflow.accent)
+  const [kanbanBuckets, setKanbanBuckets] = useState<Record<string, KanbanBucket>>(
+    normalizeKanbanBuckets(workflow.columns, workflow.kanbanStatusBuckets),
+  )
   const [typeOptions, setTypeOptions] = useState<string[]>(typeOfWorkOptions)
   const [newColumnLabel, setNewColumnLabel] = useState('')
-  const [newSwimlaneLabel, setNewSwimlaneLabel] = useState('')
   const [newTypeLabel, setNewTypeLabel] = useState('')
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [storiesSnapshot, setStoriesSnapshot] = useState<Story[]>([])
-  const [laneMessage, setLaneMessage] = useState<string | null>(null)
   const [typeMessage, setTypeMessage] = useState<string | null>(null)
   const [savingWorkflow, setSavingWorkflow] = useState(false)
   const [cloudUser, setCloudUser] = useState<User | null>(auth.currentUser)
@@ -125,6 +126,10 @@ const DataStoragePanel = ({
   }, [columns, savedStatusIndex])
 
   useEffect(() => {
+    setKanbanBuckets((prev) => normalizeKanbanBuckets(columns, prev))
+  }, [columns])
+
+  useEffect(() => {
     if (mode !== 'fs-access') return
     ;(async () => {
       const stored = await loadDirectoryHandle()
@@ -147,9 +152,9 @@ const DataStoragePanel = ({
 
   useEffect(() => {
     setColumns(workflow.columns)
-    setSwimlanes(workflow.swimlanes)
     setAccent(workflow.accent)
     setSavedStatusIndex(workflow.savedStatusIndex ?? workflow.columns.length)
+    setKanbanBuckets(normalizeKanbanBuckets(workflow.columns, workflow.kanbanStatusBuckets))
   }, [workflow])
   useEffect(() => {
     setTypeOptions(typeOfWorkOptions)
@@ -333,7 +338,6 @@ const DataStoragePanel = ({
     setError(null)
     try {
       const nextColumns = normalizeList(columns) || workflow.columns
-      const nextSwimlanes = normalizeList(swimlanes) || workflow.swimlanes
       const normalizedTypes = normalizeList(typeOptions)
       if (
         normalizedTypes.length !== typeOptions.length ||
@@ -342,11 +346,13 @@ const DataStoragePanel = ({
         setTypeOptions(normalizedTypes)
       }
       const clampedSavedIndex = Math.min(Math.max(savedStatusIndex, 0), nextColumns.length)
+      const effectiveColumns = nextColumns.length ? nextColumns : workflow.columns
       const next: WorkflowConfig = {
-        columns: nextColumns.length ? nextColumns : workflow.columns,
-        swimlanes: nextSwimlanes.length ? nextSwimlanes : workflow.swimlanes,
+        columns: effectiveColumns,
+        swimlanes: workflow.swimlanes,
         accent,
         savedStatusIndex: clampedSavedIndex,
+        kanbanStatusBuckets: normalizeKanbanBuckets(effectiveColumns, kanbanBuckets),
       }
       if (storiesSnapshot.length > 0) {
         const ctx = await loadDb()
@@ -382,7 +388,13 @@ const DataStoragePanel = ({
       setStatusMessage('That status already exists.')
       return
     }
-    setColumns((prev) => [...prev, trimmed])
+    setColumns((prev) => {
+      const next = [...prev, trimmed]
+      setKanbanBuckets((prevBuckets) =>
+        normalizeKanbanBuckets(next, { ...prevBuckets, [trimmed]: inferKanbanBucket(trimmed) }),
+      )
+      return next
+    })
     setNewColumnLabel('')
     setStatusMessage(null)
   }
@@ -404,7 +416,17 @@ const DataStoragePanel = ({
         story.status === current ? { ...story, status: nextLabel } : story,
       ),
     )
-    setColumns((prev) => prev.map((item, idx) => (idx === index ? nextLabel : item)))
+    setColumns((prev) => {
+      const nextColumns = prev.map((item, idx) => (idx === index ? nextLabel : item))
+      setKanbanBuckets((prevBuckets) => {
+        const nextBuckets = { ...prevBuckets }
+        const bucketValue = prevBuckets[current] ?? inferKanbanBucket(current)
+        delete nextBuckets[current]
+        nextBuckets[nextLabel] = bucketValue
+        return normalizeKanbanBuckets(nextColumns, nextBuckets)
+      })
+      return nextColumns
+    })
     setStatusMessage(null)
   }
 
@@ -421,38 +443,6 @@ const DataStoragePanel = ({
     }
     if (!window.confirm(`Delete "${label}"?`)) return
     setColumns((prev) => prev.filter((_, idx) => idx !== index))
-  }
-
-  const addSwimlaneLabel = () => {
-    const trimmed = newSwimlaneLabel.trim()
-    if (!trimmed) {
-      setLaneMessage('Enter a swimlane name.')
-      return
-    }
-    if (swimlanes.some((item) => item.toLowerCase() === trimmed.toLowerCase())) {
-      setLaneMessage('That swimlane already exists.')
-      return
-    }
-    setSwimlanes((prev) => [...prev, trimmed])
-    setNewSwimlaneLabel('')
-    setLaneMessage(null)
-  }
-
-  const renameSwimlaneLabel = (index: number) => {
-    const current = swimlanes[index]
-    const nextLabel = window.prompt('Rename swimlane', current)?.trim()
-    if (!nextLabel || nextLabel === current) return
-    if (swimlanes.some((item) => item.toLowerCase() === nextLabel.toLowerCase())) {
-      setLaneMessage('A swimlane with that name already exists.')
-      return
-    }
-    setSwimlanes((prev) => prev.map((item, idx) => (idx === index ? nextLabel : item)))
-    setLaneMessage(null)
-  }
-
-  const deleteSwimlaneLabel = (index: number) => {
-    if (!window.confirm(`Delete swimlane "${swimlanes[index]}"?`)) return
-    setSwimlanes((prev) => prev.filter((_, idx) => idx !== index))
   }
 
   const addTypeLabel = () => {
@@ -898,7 +888,7 @@ const DataStoragePanel = ({
             <div>
               <p className="text-sm font-semibold text-text-primary">Workflow layout</p>
               <p className="text-xs text-text-secondary">
-                Drag handles to reorder statuses, swimlanes, and type-of-work values. Rename or delete items directly.
+                Drag handles to reorder statuses and type-of-work values. Rename or delete items directly.
               </p>
             </div>
             {(message || error) && (
@@ -1080,71 +1070,44 @@ const DataStoragePanel = ({
             <div className="rounded-2xl border border-panel-border bg-surface-2/70 p-3 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Swimlanes</p>
-                  <p className="text-[11px] text-text-secondary">Drag to reorder and rename lanes.</p>
+                  <p className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">Kanban buckets</p>
+                  <p className="text-[11px] text-text-secondary">
+                    Assign each status to a board bucket. Order follows the list above.
+                  </p>
                 </div>
-                <span className="text-[11px] text-muted-foreground tabular-nums">
-                  {swimlanes.length}
-                </span>
               </div>
               <div className="mt-3 space-y-2 max-h-[220px] overflow-y-auto">
-                {swimlanes.map((lane, idx) => (
-                  <div
-                    key={`lane-${idx}-${lane}`}
-                    draggable
-                    onDragStart={() => handleDragStart('swimlanes', idx)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault()
-                      handleDrop('swimlanes', idx, setSwimlanes)
-                    }}
-                    onDragEnd={handleDragEnd}
-                    className="group flex items-center gap-2 rounded-md border border-transparent bg-background px-2 py-1 text-sm shadow-sm transition hover:border-border"
-                  >
-                    <GripVertical className="h-4 w-4 text-muted-foreground" />
-                    <span className="flex-1 truncate font-medium text-text-primary">{lane}</span>
-                    <div className="flex gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => renameSwimlaneLabel(idx)}
-                        aria-label="Rename swimlane"
+                {statusList.map((status) => {
+                  const isSaved = status === savedStatusLabel
+                  return (
+                    <div
+                      key={`bucket-${status}`}
+                      className={`flex items-center gap-2 rounded-md border border-transparent bg-background px-2 py-1 text-sm shadow-sm ${
+                        isSaved ? 'opacity-80' : ''
+                      }`}
+                    >
+                      <span className="flex-1 truncate font-medium text-text-primary">{status}</span>
+                      <Select
+                        value={kanbanBuckets[status] ?? 'not-started'}
+                        onChange={(e) => {
+                          const value = e.target.value as KanbanBucket
+                          setKanbanBuckets((prev) =>
+                            normalizeKanbanBuckets(columns, { ...prev, [status]: value }),
+                          )
+                        }}
+                        disabled={isSaved}
+                        className="w-36 text-sm h-9"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => deleteSwimlaneLabel(idx)}
-                        aria-label="Delete swimlane"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                        {KANBAN_BUCKETS.map((bucket) => (
+                          <option key={bucket.id} value={bucket.id}>
+                            {bucket.label}
+                          </option>
+                        ))}
+                      </Select>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
-              <div className="mt-3 flex gap-2">
-                <Input
-                  placeholder="Add swimlane"
-                  value={newSwimlaneLabel}
-                  onChange={(e) => {
-                    setNewSwimlaneLabel(e.target.value)
-                    setLaneMessage(null)
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      addSwimlaneLabel()
-                    }
-                  }}
-                  className="flex-1"
-                />
-                <Button size="sm" onClick={addSwimlaneLabel}>
-                  Add
-                </Button>
-              </div>
-              {laneMessage ? <p className="text-[11px] text-amber-500">{laneMessage}</p> : null}
             </div>
           </div>
 

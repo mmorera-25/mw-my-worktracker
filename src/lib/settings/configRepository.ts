@@ -1,17 +1,76 @@
 import type { Database } from 'sql.js'
 
+export type KanbanBucket = 'not-started' | 'working' | 'completed'
+
+export const KANBAN_BUCKETS: { id: KanbanBucket; label: string }[] = [
+  { id: 'not-started', label: 'Not started' },
+  { id: 'working', label: 'Working on it' },
+  { id: 'completed', label: 'Completed' },
+]
+
 export type WorkflowConfig = {
   columns: string[]
   swimlanes: string[]
   accent: 'indigo' | 'teal'
   savedStatusIndex?: number
+  kanbanStatusBuckets: Record<string, KanbanBucket>
+}
+
+const defaultColumns = [
+  'Backlog',
+  'Scheduled',
+  'On Hold / Waiting',
+  'New',
+  'To Ask',
+  'To Do',
+  'Done',
+] as const
+
+export const inferKanbanBucket = (status: string): KanbanBucket => {
+  const lower = status.toLowerCase()
+  if (['done', 'completed', 'complete', 'saved'].some((keyword) => lower.includes(keyword))) {
+    return 'completed'
+  }
+  if (['progress', 'doing', 'work', 'active'].some((keyword) => lower.includes(keyword))) {
+    return 'working'
+  }
+  if (['hold', 'blocked', 'wait', 'on hold'].some((keyword) => lower.includes(keyword))) {
+    return 'working'
+  }
+  if (['ask', 'schedule', 'new', 'backlog'].some((keyword) => lower.includes(keyword))) {
+    return 'not-started'
+  }
+  return 'not-started'
+}
+
+const buildDefaultBuckets = (columns: readonly string[]) => {
+  const base: Record<string, KanbanBucket> = {}
+  columns.forEach((status) => {
+    base[status] = inferKanbanBucket(status)
+  })
+  base.Saved = 'completed'
+  return base
 }
 
 const defaultConfig: WorkflowConfig = {
-  columns: ['Backlog', 'Scheduled', 'On Hold / Waiting', 'New', 'To Ask', 'To Do', 'Done'],
+  columns: [...defaultColumns],
   swimlanes: ['Core', 'Enablement', 'Bugs'],
   accent: 'indigo',
   savedStatusIndex: undefined,
+  kanbanStatusBuckets: buildDefaultBuckets(defaultColumns),
+}
+
+export const normalizeKanbanBuckets = (
+  columns: string[],
+  buckets?: Record<string, KanbanBucket> | null,
+) => {
+  const next: Record<string, KanbanBucket> = {}
+  const source = buckets ?? {}
+  columns.forEach((status) => {
+    next[status] = source[status] ?? inferKanbanBucket(status)
+  })
+  next.Saved = source.Saved ?? 'completed'
+  return next
 }
 
 const get_json = (db: Database, key: string) => {
@@ -77,7 +136,11 @@ export const loadWorkflowConfig = (db: Database): WorkflowConfig => {
   const accent = (get_json(db, 'accent_color') as WorkflowConfig['accent'] | null) ?? 'indigo'
   const savedStatusIndex =
     (get_json(db, 'saved_status_index') as number | null) ?? defaultConfig.savedStatusIndex
-  return { columns, swimlanes, accent, savedStatusIndex }
+  const storedBuckets = get_json(db, 'kanban_status_buckets') as
+    | Record<string, KanbanBucket>
+    | null
+  const kanbanStatusBuckets = normalizeKanbanBuckets(columns, storedBuckets ?? defaultConfig.kanbanStatusBuckets)
+  return { columns, swimlanes, accent, savedStatusIndex, kanbanStatusBuckets }
 }
 
 export const saveWorkflowConfig = (db: Database, config: WorkflowConfig) => {
@@ -87,4 +150,5 @@ export const saveWorkflowConfig = (db: Database, config: WorkflowConfig) => {
   if (typeof config.savedStatusIndex === 'number') {
     set_json(db, 'saved_status_index', config.savedStatusIndex)
   }
+  set_json(db, 'kanban_status_buckets', config.kanbanStatusBuckets)
 }

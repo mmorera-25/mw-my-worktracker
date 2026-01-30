@@ -1,5 +1,4 @@
 import {
-  Calendar,
   Inbox,
   ListTodo,
   Search,
@@ -13,6 +12,7 @@ import {
   Bell,
   ChevronsLeft,
   ChevronsRight,
+  Kanban,
 } from "lucide-react";
 import { cn } from "@inbox/lib/utils";
 import { useEffect, useMemo, useState } from "react";
@@ -36,7 +36,7 @@ interface IconSidebarProps {
 const topIcons = [
   { id: "week", icon: Inbox, label: "Inbox", iconTint: "text-primary" },
   { id: "yearly", icon: ListTodo, label: "Yearly Inbox", iconTint: "text-accent" },
-  { id: "today", icon: Calendar, label: "Calendar" },
+  { id: "kanban", icon: Kanban, label: "Kanban" },
   { id: "search", icon: Search, label: "Search" },
 ];
 

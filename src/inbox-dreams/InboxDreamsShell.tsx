@@ -4,6 +4,7 @@ import { IconSidebar } from "@inbox/components/IconSidebar";
 import { ListSidebar } from "@inbox/components/ListSidebar";
 import { StoryList } from "@inbox/components/StoryList";
 import { StoryDetail } from "@inbox/components/StoryDetail";
+import StoryKanban from "@inbox/components/StoryKanban";
 import { EmptyState } from "@inbox/components/EmptyState";
 import { CreateEpicDialog } from "@inbox/components/CreateEpicDialog";
 import { Dialog, DialogContent } from "@inbox/components/ui/dialog";
@@ -14,20 +15,16 @@ import OKRPage from "../features/okrs/OKRPage";
 import OneOnOneFeed from "../features/oneonone/OneOnOneFeed";
 import ReportingView from "../features/reporting/ReportingView";
 import { loadDb, persistDb, type DbContext } from "../lib/storage/dbManager";
-import { loadWorkflowConfig, saveWorkflowConfig, type WorkflowConfig } from "../lib/settings/configRepository";
+import {
+  loadWorkflowConfig,
+  saveWorkflowConfig,
+  normalizeKanbanBuckets,
+  type WorkflowConfig,
+  type KanbanBucket,
+} from "../lib/settings/configRepository";
 import { setAccentColor } from "../theme/applyTheme";
 import { loadInboxState, saveInboxState } from "@inbox/data/inboxRepository";
-import {
-  addDays,
-  addWeeks,
-  endOfMonth,
-  endOfWeek,
-  format,
-  isSameDay,
-  isSameMonth,
-  startOfMonth,
-  startOfWeek,
-} from "date-fns";
+import { addWeeks, endOfWeek, format, isSameDay, startOfWeek } from "date-fns";
 import { Archive, ArrowLeft, Inbox, Trash2, RotateCcw } from "lucide-react";
 
 type InboxDreamsShellProps = {
@@ -45,6 +42,15 @@ const INBOX_LIST_WIDTH = 420;
 const EPICS_BAR_WIDTH = 24;
 const EPICS_RESIZER_WIDTH = 4;
 const EPICS_SEPARATOR_WIDTH = 1;
+const DEFAULT_WORKFLOW_COLUMNS = [
+  "Backlog",
+  "Scheduled",
+  "On Hold / Waiting",
+  "New",
+  "To Ask",
+  "To Do",
+  "Done",
+] as const;
 const LIST_MIN_WIDTH = 320;
 const LIST_MAX_RATIO = 0.7;
 const isSystemEpic = (epic: Epic) =>
@@ -190,11 +196,11 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   const [isHydrated, setIsHydrated] = useState(false);
   const [focusedOkr, setFocusedOkr] = useState<string | null>(null);
   const [workflow, setWorkflow] = useState<WorkflowConfig>({
-    columns: ["Backlog", "Scheduled", "On Hold / Waiting", "New", "To Ask", "To Do", "Done"],
+    columns: [...DEFAULT_WORKFLOW_COLUMNS],
     swimlanes: ["Core", "Enablement", "Bugs"],
     accent: "indigo",
+    kanbanStatusBuckets: normalizeKanbanBuckets([...DEFAULT_WORKFLOW_COLUMNS], null),
   });
-  const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [editingField, setEditingField] = useState<{
     id: string;
     field: "name" | "key" | "description";
@@ -233,15 +239,11 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   const [typeOfWorkFilters, setTypeOfWorkFilters] = useState<string[]>([]);
   const statusFiltersInitialized = useRef(false);
   const typeFiltersInitialized = useRef(false);
-  const [calendarRightWidth, setCalendarRightWidth] = useState(320);
-  const [isResizingCalendarRight, setIsResizingCalendarRight] = useState(false);
   const [epicsPaneWidth, setEpicsPaneWidth] = useState(208);
   const [isResizingEpicsPane, setIsResizingEpicsPane] = useState(false);
   const [isEpicsPaneCollapsed, setIsEpicsPaneCollapsed] = useState(false);
-  const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(null);
   const [detailContainerWidth, setDetailContainerWidth] = useState(0);
   const detailContainerRef = useRef<HTMLDivElement | null>(null);
-  const calendarContainerRef = useRef<HTMLDivElement | null>(null);
   const dbContextRef = useRef<DbContext | null>(null);
   const [requiresStorageSetup, setRequiresStorageSetup] = useState(false);
   const [typeOfWorkOptions, setTypeOfWorkOptions] = useState<string[]>([
@@ -281,8 +283,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     () =>
       [
         "todo",
-        "today",
         "week",
+        "kanban",
         "yearly",
         "inbox",
         "search",
@@ -305,6 +307,10 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   const statusOptions = useMemo(
     () => workflow.columns.filter((column) => column !== "Doing"),
     [workflow.columns]
+  );
+  const kanbanBuckets = useMemo(
+    () => normalizeKanbanBuckets(workflow.columns, workflow.kanbanStatusBuckets),
+    [workflow.columns, workflow.kanbanStatusBuckets]
   );
   const isDocumentationStory = useCallback(
     (story: Story) => {
@@ -340,7 +346,6 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         setTypeOfWorkOptions(inboxState.preferences.typeOfWorkOptions);
       }
       setListPaneWidth(inboxState.preferences.listPaneWidth ?? INBOX_LIST_WIDTH);
-      setCalendarRightWidth(inboxState.preferences.calendarRightWidth ?? 320);
       setEpicsPaneWidth(clampPaneWidth(inboxState.preferences.epicsPaneWidth ?? 208));
       setIsEpicsPaneCollapsed(Boolean(inboxState.preferences.epicsPaneCollapsed));
       await persistDb(ctx);
@@ -482,7 +487,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
           return content.some((entry) => entry.includes(term));
         });
       }
-      if (view === "week" || view === "yearly") {
+      if (view === "week" || view === "yearly" || view === "kanban") {
         if (statusFilters.length === 0) {
           result = [];
         } else {
@@ -498,7 +503,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
           });
         }
       }
-      if (view === "week") {
+      if (view === "week" || view === "kanban") {
         if (dueFilter === "today") {
           const today = new Date();
           result = result.filter(
@@ -625,14 +630,14 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         setSelectedEpicId(null);
         setSelectedStoryId(null);
       }
-      if (view === "week" || view === "yearly") {
+      if (view === "week" || view === "yearly" || view === "kanban") {
         setSelectedEpicId(null);
         setSelectedStoryId(null);
       }
       if (view === "inbox") {
         setSelectedStoryId(null);
       }
-      if (view !== "week") {
+      if (!["week", "kanban"].includes(view)) {
         setDueFilter("all");
       }
     },
@@ -657,7 +662,6 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         setTypeOfWorkOptions(inboxState.preferences.typeOfWorkOptions);
       }
       setListPaneWidth(inboxState.preferences.listPaneWidth ?? INBOX_LIST_WIDTH);
-      setCalendarRightWidth(inboxState.preferences.calendarRightWidth ?? 320);
       setEpicsPaneWidth(clampPaneWidth(inboxState.preferences.epicsPaneWidth ?? 208));
       setIsEpicsPaneCollapsed(Boolean(inboxState.preferences.epicsPaneCollapsed));
       await persistDb(ctx);
@@ -863,10 +867,27 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     if (!isCompletedStatus) {
       normalizedStory.completedAt = undefined;
     }
-    setStories((prev) =>
-      prev.map((s) => (s.id === normalizedStory.id ? normalizedStory : s))
-    );
+      setStories((prev) =>
+        prev.map((s) => (s.id === normalizedStory.id ? normalizedStory : s))
+      );
   }, [doneStatus, epics]);
+
+  const handleMoveStoryToBucket = useCallback(
+    (storyId: string, targetBucket: KanbanBucket) => {
+      const story = stories.find((s) => s.id === storyId);
+      if (!story) return;
+      const bucketStatuses = [...workflow.columns, "Saved"].filter(
+        (status) =>
+          (kanbanBuckets[status] ?? (status === "Saved" ? "completed" : "not-started")) ===
+          targetBucket
+      );
+      const nextStatus =
+        bucketStatuses[0] ??
+        (targetBucket === "completed" ? doneStatus : defaultStatus);
+      handleUpdateStory({ ...story, status: nextStatus });
+    },
+    [stories, workflow.columns, kanbanBuckets, doneStatus, defaultStatus, handleUpdateStory]
+  );
 
   const handleAddTypeOfWork = useCallback((nextType: string) => {
     const trimmed = nextType.trim();
@@ -959,10 +980,11 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     if (activeView === "settings") return "Settings";
     if (activeView === "epics") return "Epics";
     if (activeView === "yearly") return "Yearly Inbox";
+    if (activeView === "kanban") return "Kanban";
     return "Inbox";
   };
 
-  const isCalendarView = activeView === "today";
+  const isKanbanView = activeView === "kanban";
   const dateMode = activeView === "yearly" ? "month" : "day";
   const modalDateMode = modalActiveView === "yearly" ? "month" : "day";
   const modalViewTitle =
@@ -1002,27 +1024,6 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isResizingListPane, epicsPaneTotalWidth]);
-
-  useEffect(() => {
-    if (!isResizingCalendarRight) return;
-    const handleMouseMove = (event: MouseEvent) => {
-      const container = calendarContainerRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const nextWidth = rect.right - event.clientX;
-      const minWidth = 240;
-      const maxWidth = rect.width * 0.6;
-      const clamped = Math.min(maxWidth, Math.max(minWidth, nextWidth));
-      setCalendarRightWidth(clamped);
-    };
-    const handleMouseUp = () => setIsResizingCalendarRight(false);
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isResizingCalendarRight]);
 
   useEffect(() => {
     if (!isResizingEpicsPane) return;
@@ -1069,7 +1070,6 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         preferences: {
           showArchived,
           listPaneWidth,
-          calendarRightWidth,
           epicsPaneWidth,
           epicsPaneCollapsed: isEpicsPaneCollapsed,
           typeOfWorkOptions,
@@ -1083,7 +1083,6 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     stories,
     showArchived,
     listPaneWidth,
-    calendarRightWidth,
     epicsPaneWidth,
     isEpicsPaneCollapsed,
     typeOfWorkOptions,
@@ -1125,60 +1124,6 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
       setIsModalEpicsPaneCollapsed(true);
     }
   }, [isInboxModalOpen]);
-  const calendarDays = useMemo(() => {
-    const start = startOfWeek(startOfMonth(calendarMonth), { weekStartsOn: 0 });
-    const end = endOfWeek(endOfMonth(calendarMonth), { weekStartsOn: 0 });
-    const days = [];
-    let current = start;
-    while (current <= end) {
-      days.push(current);
-      current = addDays(current, 1);
-    }
-    return days;
-  }, [calendarMonth]);
-
-  const storiesByDay = useMemo(() => {
-    return regularStories.reduce<Record<string, Story[]>>((acc, story) => {
-      if (story.isDeleted) return acc;
-      if (isStoryDone(story)) return acc;
-      const dates = getAllDueDates(story);
-      const seen = new Set<string>();
-      dates.forEach((date) => {
-        const key = format(date, "yyyy-MM-dd");
-        if (seen.has(key)) return;
-        seen.add(key);
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(story);
-      });
-      return acc;
-    }, {});
-  }, [regularStories, isStoryDone]);
-
-  const completedStoriesByDay = useMemo(() => {
-    return regularStories.reduce<Record<string, Story[]>>((acc, story) => {
-      if (story.isDeleted) return acc;
-      if (!story.completedAt) return acc;
-      const key = format(story.completedAt, "yyyy-MM-dd");
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(story);
-      return acc;
-    }, {});
-  }, [regularStories]);
-
-  const todayDueTasks = useMemo(() => {
-    const today = new Date();
-    return regularStories
-      .filter(
-        (story) =>
-          !story.isDeleted &&
-          !isStoryDone(story) &&
-          isSameDay(getEffectiveDueDate(story), today)
-      )
-      .sort(
-        (a, b) =>
-          getEffectiveDueDate(a).getTime() - getEffectiveDueDate(b).getTime()
-      );
-  }, [regularStories, isStoryDone]);
 
   const upcomingNotifications = useMemo(() => {
     return regularStories
@@ -1207,7 +1152,6 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         setTypeOfWorkOptions(inboxState.preferences.typeOfWorkOptions);
       }
       setListPaneWidth(inboxState.preferences.listPaneWidth ?? INBOX_LIST_WIDTH);
-      setCalendarRightWidth(inboxState.preferences.calendarRightWidth ?? 320);
       setEpicsPaneWidth(clampPaneWidth(inboxState.preferences.epicsPaneWidth ?? 208));
       setIsEpicsPaneCollapsed(Boolean(inboxState.preferences.epicsPaneCollapsed));
       setSelectedEpicId(null);
@@ -1257,6 +1201,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
               }}
               onStorageReady={handleStorageReady}
               requiresStorageSetup={requiresStorageSetup}
+              typeOfWorkOptions={typeOfWorkOptions}
+              onPersistTypeOfWorkOptions={persistTypeOfWorkOptions}
               statusUsageCounts={statusUsageCounts}
               typeUsageCounts={typeUsageCounts}
             />
@@ -1264,590 +1210,175 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
         </div>
       ) : isInboxView ? (
         <>
-          {isCalendarView ? (
+          {isKanbanView ? (
             <div className="flex-1 bg-background flex flex-col h-full min-w-0 overflow-hidden">
-              <div ref={calendarContainerRef} className="flex h-full min-h-0 overflow-hidden">
-                <div className="flex-1 min-w-0 border-r border-panel-border flex flex-col">
-                  <div className="px-4 py-4 border-b border-panel-border">
-                    <div className="flex items-center justify-between">
-                      <div className="text-lg font-semibold text-foreground">Calendar</div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <button
-                          type="button"
-                          className="rounded-md border border-panel-border px-2 py-1 text-xs hover:bg-hover-overlay"
-                          onClick={() =>
-                            setCalendarMonth(
-                              new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1)
-                            )
-                          }
-                        >
-                          Prev
-                        </button>
-                        <span>{format(calendarMonth, "MMMM yyyy")}</span>
-                        <button
-                          type="button"
-                          className="rounded-md border border-panel-border px-2 py-1 text-xs hover:bg-hover-overlay"
-                          onClick={() =>
-                            setCalendarMonth(
-                              new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1)
-                            )
-                          }
-                        >
-                          Next
-                        </button>
-                      </div>
+              <div className="flex h-full min-h-0">
+                <div className="flex-1 overflow-hidden p-4">
+                  <StoryKanban
+                    stories={filteredStories}
+                    epics={epics}
+                    statusOrder={workflow.columns}
+                    bucketMap={kanbanBuckets}
+                    selectedStoryId={selectedStoryId}
+                    onSelectStory={setSelectedStoryId}
+                    onMoveStory={handleMoveStoryToBucket}
+                    statusFilters={statusFilters}
+                    typeOfWorkFilters={typeOfWorkFilters}
+                    statusFilterOptions={allStatusFilterOptions}
+                    typeFilterOptions={allTypeFilterOptions}
+                    dueFilter={dueFilter}
+                    onStatusFiltersChange={setStatusFilters}
+                    onTypeOfWorkFiltersChange={setTypeOfWorkFilters}
+                    onDueFilterChange={setDueFilter}
+                  />
+                </div>
+                <div className="w-px bg-panel-border" />
+                <div className="w-[420px] shrink-0 border-l border-panel-border bg-card">
+                  {selectedStory ? (
+                    <StoryDetail
+                      story={selectedStory}
+                      epic={epics.find((e) => e.id === selectedStory.epicId)}
+                      epics={epics}
+                      statusOptions={statusOptions}
+                      doneStatus={doneStatus}
+                      defaultStatus={defaultStatus}
+                      dateMode={dateMode}
+                      typeOfWorkOptions={typeOfWorkOptions}
+                      onAddTypeOfWork={handleAddTypeOfWork}
+                      onUpdateStory={handleUpdateStory}
+                      onOpenMeetings={() => setActiveView("oneonone")}
+                      onDeleteStory={handleDeleteStory}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <EmptyState
+                        title="No story selected"
+                        description="Select a story to view details"
+                      />
                     </div>
-                  </div>
-                  <div className="grid grid-cols-7 border-b border-panel-border bg-card text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div ref={detailContainerRef} className="flex h-full flex-1 min-w-0">
+              <div className="relative flex h-full">
+                <button
+                  type="button"
+                  className="flex h-full w-6 flex-col items-center justify-start border border-panel-border bg-card/70 py-3 text-[10px] uppercase tracking-[0.2em] text-muted-foreground transition-all hover:bg-card"
+                  onClick={() => setIsEpicsPaneCollapsed((prev) => !prev)}
+                  title={isEpicsPaneCollapsed ? "Show epics list" : "Hide epics list"}
+                >
+                  <span className="inline-block rotate-180 [writing-mode:vertical-rl]">
+                    {isEpicsPaneCollapsed ? "Show epics list" : "Hide epics list"}
+                  </span>
+                </button>
+                <div
+                  className={`flex items-stretch transition-all duration-200 ${
+                    isEpicsPaneCollapsed ? "w-0 opacity-0" : "opacity-100"
+                  }`}
+                >
+                  {!isEpicsPaneCollapsed && (
+                    <>
+                      <ListSidebar
+                        epics={activeEpics}
+                        selectedEpicId={selectedEpicId}
+                        onSelectEpic={handleSelectEpic}
+                        onCreateEpic={() => setIsCreateEpicOpen(true)}
+                        storyCounts={storyCounts}
+                        activeView={activeView}
+                        onViewChange={handleViewChange}
+                        width={clampPaneWidth(epicsPaneWidth)}
+                        onRenameEpic={handleRenameEpicFromSidebar}
+                        onDeleteEpic={handleArchiveEpic}
+                      />
                       <div
-                        key={day}
-                        className="px-3 py-2 border-r border-panel-border last:border-r-0"
-                      >
-                        {day}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-y-auto">
-                    <div className="grid min-h-full grid-cols-7 auto-rows-fr">
-                      {calendarDays.map((day) => {
-                        const key = format(day, "yyyy-MM-dd");
-                        const dayStories = storiesByDay[key] || [];
-                        const dayIndex = day.getDay();
-                        const isWeekend = dayIndex === 0 || dayIndex === 6;
-                        const weekendStyle = isWeekend
-                          ? { backgroundColor: "rgba(0, 0, 0, 0.08)" }
-                          : undefined;
-                        return (
-                          <div
-                            key={key}
-                            style={weekendStyle}
-                            className={`border-r border-b border-panel-border p-2 ${
-                              isSameMonth(day, new Date()) ? "bg-background" : "bg-card/60"
-                            }`}
-                          >
-                            <div
-                              className={`mb-2 text-xs font-semibold ${
-                                isSameDay(day, new Date())
-                                  ? "text-primary"
-                                  : "text-muted-foreground"
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <span>{format(day, "d")}</span>
-                                {completedStoriesByDay[key]?.length ? (
-                                  <button
-                                    type="button"
-                                    className="text-[11px] text-emerald-500 hover:text-emerald-400"
-                                    onClick={() => setSelectedCalendarDay(day)}
-                                    title="View completed stories"
-                                  >
-                                    ✓
-                                  </button>
-                                ) : null}
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              {dayStories.slice(0, 3).map((story) => (
-                                <button
-                                  key={story.id}
-                                  type="button"
-                                  className="flex w-full items-center gap-2 truncate rounded-md border border-panel-border bg-card px-2 py-1 text-left text-xs text-foreground hover:bg-hover-overlay"
-                                  onClick={() => setSelectedStoryId(story.id)}
-                                >
-                                  <span
-                                    className="h-2 w-2 rounded-full shrink-0"
-                                    style={{
-                                      backgroundColor:
-                                        epics.find((epic) => epic.id === story.epicId)?.color ??
-                                        "hsl(215, 16%, 47%)",
-                                    }}
-                                  />
-                                  <span className="truncate min-w-0">{story.title}</span>
-                                </button>
-                              ))}
-                              {dayStories.length > 3 ? (
-                                <div className="text-xs text-muted-foreground">
-                                  +{dayStories.length - 3} more
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-                <div
-                  className="w-1 cursor-col-resize bg-transparent hover:bg-border"
-                  onMouseDown={() => setIsResizingCalendarRight(true)}
-                  title="Resize calendar details pane"
-                />
-                <div
-                  style={{ width: `${calendarRightWidth}px` }}
-                  className="shrink-0 min-w-[18rem] border-l border-panel-border bg-card/80 p-4 flex flex-col gap-4 overflow-y-auto"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-foreground">
-                      Today's due stories
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {todayDueTasks.length} {todayDueTasks.length === 1 ? "story" : "stories"}
-                    </span>
-                  </div>
-                  <div className="flex-1 space-y-3">
-                    {todayDueTasks.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No stories due today.</p>
-                    ) : (
-                      todayDueTasks.map((story) => {
-                        const epic = epics.find((e) => e.id === story.epicId);
-                        return (
-                          <button
-                            key={story.id}
-                            type="button"
-                            onClick={() => setSelectedStoryId(story.id)}
-                            className={`w-full rounded-lg border px-3 py-3 text-left transition hover:bg-hover-overlay ${
-                              selectedStoryId === story.id
-                                ? "border-primary/70 bg-primary/10"
-                                : "border-panel-border bg-card"
-                            }`}
-                          >
-                            <div className="text-sm font-medium text-foreground">
-                              {story.title}
-                            </div>
-                            <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-                              <span>{epic?.name ?? "Backlog"}</span>
-                              <span>{format(getEffectiveDueDate(story), "MMM d")}</span>
-                            </div>
-                          </button>
-                        );
-                      })
-                    )}
-                  </div>
-                  <div className="border-t border-panel-border pt-4">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold text-foreground">
-                        Story preview
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {selectedStory ? "Selected" : "None"}
-                      </span>
-                    </div>
-                    {selectedStory ? (
-                      <div className="mt-3 space-y-2 text-sm">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className="h-2.5 w-2.5 rounded-full shrink-0"
-                            style={{
-                              backgroundColor:
-                                epics.find((epic) => epic.id === selectedStory.epicId)?.color ??
-                                "hsl(215, 16%, 47%)",
-                            }}
-                          />
-                          <span className="font-semibold text-foreground truncate">
-                            {selectedStory.title}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>
-                            {epics.find((epic) => epic.id === selectedStory.epicId)?.name ??
-                              "No epic"}
-                          </span>
-                          <span>{format(getEffectiveDueDate(selectedStory), "MMM d")}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {selectedStory.description
-                            ? selectedStory.description
-                                .replace(/<[^>]+>/g, "")
-                                .replace(/\s+/g, " ")
-                                .trim()
-                            : "No description"}
-                        </p>
-                        <div className="text-xs text-muted-foreground">
-                          Due {format(getEffectiveDueDate(selectedStory), "MMM d")}
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Click a story to preview details.
-                      </p>
-                    )}
-                  </div>
-                  <div className="border-t border-panel-border pt-4">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold text-foreground">
-                        Completed stories
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {selectedCalendarDay
-                          ? format(selectedCalendarDay, "MMM d")
-                          : "Select a day"}
-                      </span>
-                    </div>
-                    {selectedCalendarDay ? (
-                      <div className="mt-3 space-y-2">
-                        {(completedStoriesByDay[
-                          format(selectedCalendarDay, "yyyy-MM-dd")
-                        ] ?? []).length === 0 ? (
-                          <p className="text-xs text-muted-foreground">
-                            No completed stories on this day.
-                          </p>
-                        ) : (
-                          (completedStoriesByDay[
-                            format(selectedCalendarDay, "yyyy-MM-dd")
-                          ] ?? []).map((story) => (
-                            <button
-                              key={story.id}
-                              type="button"
-                              onClick={() => setSelectedStoryId(story.id)}
-                              className="w-full rounded-lg border border-panel-border bg-card px-3 py-2 text-left text-xs text-foreground hover:bg-hover-overlay"
-                            >
-                              {story.title}
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Click the check icon on a day to view completions.
-                      </p>
-                    )}
-                  </div>
+                        className="w-1 cursor-col-resize bg-transparent hover:bg-border"
+                        onMouseDown={() => setIsResizingEpicsPane(true)}
+                        title="Resize epics pane"
+                      />
+                      <div className="w-px bg-panel-border" />
+                    </>
+                  )}
                 </div>
               </div>
-            </div>
-      ) : activeView === "epics" ? (
-        <div className="flex-1 bg-background flex flex-col h-full min-w-0">
-          <div className="px-6 py-4 border-b border-panel-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Manage</p>
-                <h2 className="text-xl font-semibold text-foreground">Epics</h2>
-              </div>
-              <div className="flex items-center gap-3 pr-16">
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
-                  onClick={() => setIsCreateEpicOpen(true)}
-                >
-                  <span className="text-base leading-none">+</span>
-                  New Epic
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center gap-2 rounded-md border border-panel-border px-3 text-sm font-medium text-foreground hover:bg-hover-overlay"
-                  onClick={() => setShowArchived((prev) => !prev)}
-                >
-                  {showArchived ? "Hide archived" : "Show archived"}
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-              onClick={() => setActiveView("week")}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Inbox
-            </button>
-            <div className="rounded-lg border border-panel-border bg-card">
-              <div className="grid grid-cols-[1.2fr,0.6fr,2fr,0.5fr,0.5fr] gap-3 border-b border-panel-border px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <span>Name</span>
-                <span>Key</span>
-                <span>Description</span>
-                <span className="text-right">Stories</span>
-                <span className="text-right">Actions</span>
-              </div>
-              <div className="divide-y divide-panel-border">
-                {adminEpics.map((epic) => {
-                  const systemEpic = isSystemEpic(epic);
-                  return (
-                  <div
-                    key={epic.id}
-                    className="grid grid-cols-[1.2fr,0.6fr,2fr,0.5fr,0.5fr] gap-3 px-4 py-3 text-sm"
-                  >
-                    <div className="flex items-center gap-2 text-foreground">
-                      <button
-                        type="button"
-                        className={`h-2.5 w-2.5 rounded-full ${
-                          systemEpic ? "opacity-60 cursor-default" : ""
-                        }`}
-                        style={{ backgroundColor: epic.color }}
-                        onClick={() => {
-                          if (systemEpic) return;
-                          setEditingEpic(epic);
-                          setIsEditEpicOpen(true);
-                        }}
-                        title="Change epic color"
-                      />
-                      {editingField?.id === epic.id && editingField.field === "name" ? (
-                        <input
-                          value={editValue}
-                          onChange={(event) => setEditValue(event.target.value)}
-                          onBlur={saveEditField}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              saveEditField();
-                            }
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              cancelEditField();
-                            }
-                          }}
-                          className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
-                          placeholder="Epic name"
-                          autoFocus
-                        />
-                      ) : systemEpic ? (
-                        <span className="font-medium text-muted-foreground">
-                          {epic.name}
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="cursor-text font-medium text-left"
-                          onClick={() => startEditField(epic, "name")}
-                        >
-                          {epic.name}
-                        </button>
-                      )}
-                    </div>
-                    {editingField?.id === epic.id && editingField.field === "key" ? (
-                      <input
-                        value={editValue}
-                        onChange={(event) => {
-                          const sanitized = event.target.value
-                            .replace(/[^a-zA-Z0-9]/g, "")
-                            .toUpperCase();
-                          setEditValue(sanitized.slice(0, 3));
-                        }}
-                        onBlur={saveEditField}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            saveEditField();
-                          }
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            cancelEditField();
-                          }
-                        }}
-                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
-                        placeholder="KEY"
-                        maxLength={3}
-                        autoFocus
-                      />
-                    ) : systemEpic ? (
-                      <span className="text-left text-muted-foreground">{epic.key}</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="cursor-text text-left text-muted-foreground"
-                        onClick={() => startEditField(epic, "key")}
-                      >
-                        {epic.key}
-                      </button>
-                    )}
-                    {editingField?.id === epic.id && editingField.field === "description" ? (
-                      <textarea
-                        value={editValue}
-                        onChange={(event) => setEditValue(event.target.value)}
-                        onBlur={saveEditField}
-                        onKeyDown={(event) => {
-                          if (event.key === "Escape") {
-                            event.preventDefault();
-                            cancelEditField();
-                          }
-                        }}
-                        className="min-h-[2.5rem] w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground"
-                        placeholder="Description"
-                        rows={2}
-                        autoFocus
-                      />
-                    ) : systemEpic ? (
-                      <span className="text-left text-muted-foreground line-clamp-2">
-                        {epic.description || "—"}
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="cursor-text text-left text-muted-foreground line-clamp-2"
-                        onClick={() => startEditField(epic, "description")}
-                      >
-                        {epic.description || "—"}
-                      </button>
-                    )}
-                    <span className="text-right text-muted-foreground">
-                      {storyCounts[epic.id] || 0}
-                    </span>
-                    <div className="flex items-center justify-end">
-                      {!epic.isArchived && !systemEpic && (
-                        <button
-                          type="button"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-hover-overlay hover:text-foreground"
-                          onClick={() => handleArchiveEpic(epic.id)}
-                          title="Archive epic"
-                        >
-                          <Archive className="h-4 w-4" />
-                        </button>
-                      )}
-                      {epic.isArchived && !systemEpic && (
-                        <button
-                          type="button"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-hover-overlay hover:text-foreground"
-                          onClick={() => handleRestoreEpic(epic.id)}
-                          title="Restore epic"
-                        >
-                          <RotateCcw className="h-4 w-4" />
-                        </button>
-                      )}
-                      {!systemEpic && (
-                        <button
-                          type="button"
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-hover-overlay hover:text-foreground"
-                          onClick={() => handleDeleteEpic(epic.id)}
-                          title="Delete epic"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-                })}
-                {adminEpics.length === 0 && (
-                  <div className="px-4 py-6 text-sm text-muted-foreground">
-                    {showArchived
-                      ? "No archived epics."
-                      : "No epics yet. Create your first epic to get started."}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-        ) : (
-          <div ref={detailContainerRef} className="flex h-full flex-1 min-w-0">
-            <div className="relative flex h-full">
-              <button
-                type="button"
-                className="flex h-full w-6 flex-col items-center justify-start border border-panel-border bg-card/70 py-3 text-[10px] uppercase tracking-[0.2em] text-muted-foreground transition-all hover:bg-card"
-                onClick={() => setIsEpicsPaneCollapsed((prev) => !prev)}
-                title={isEpicsPaneCollapsed ? "Show epics list" : "Hide epics list"}
-              >
-                <span className="inline-block rotate-180 [writing-mode:vertical-rl]">
-                  {isEpicsPaneCollapsed ? "Show epics list" : "Hide epics list"}
-                </span>
-              </button>
-              <div
-                className={`flex items-stretch transition-all duration-200 ${
-                  isEpicsPaneCollapsed ? "w-0 opacity-0" : "opacity-100"
-                }`}
-              >
-                {!isEpicsPaneCollapsed && (
-                  <>
-                    <ListSidebar
-                      epics={activeEpics}
-                      selectedEpicId={selectedEpicId}
-                      onSelectEpic={handleSelectEpic}
-                      onCreateEpic={() => setIsCreateEpicOpen(true)}
-                      storyCounts={storyCounts}
-                      activeView={activeView}
-                      onViewChange={handleViewChange}
-                      width={clampPaneWidth(epicsPaneWidth)}
-                      onRenameEpic={handleRenameEpicFromSidebar}
-                      onDeleteEpic={handleArchiveEpic}
-                    />
-                    <div
-                      className="w-1 cursor-col-resize bg-transparent hover:bg-border"
-                      onMouseDown={() => setIsResizingEpicsPane(true)}
-                      title="Resize epics pane"
-                    />
-                    <div className="w-px bg-panel-border" />
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="shrink-0" style={{ width: effectiveListWidth }}>
-              <StoryList
-                stories={filteredStories}
-                epics={epics}
-                statusOptions={statusOptions}
-                doneStatus={doneStatus}
-                defaultStatus={defaultStatus}
-                savedStatusIndex={workflow.savedStatusIndex}
-                statusFilters={statusFilters}
-                typeOfWorkFilters={typeOfWorkFilters}
-                onStatusFiltersChange={setStatusFilters}
-                onTypeOfWorkFiltersChange={setTypeOfWorkFilters}
-                typeOfWorkOptions={typeOfWorkOptions}
-                statusFilterOptions={allStatusFilterOptions}
-                typeFilterOptions={allTypeFilterOptions}
-                selectedStoryId={selectedStoryId}
-                onSelectStory={setSelectedStoryId}
-                onCreateStory={(title) => handleQuickAddStory(title, activeView)}
-                onUpdateStory={handleUpdateStory}
-                onDeleteStory={handleDeleteStory}
-                onRestoreStory={handleRestoreStory}
-                onPermanentDelete={handlePermanentDelete}
-                onEmptyTrash={handleEmptyTrash}
-                viewTitle={getViewTitle()}
-                activeView={activeView}
-                dateMode={dateMode}
-                dueFilter={dueFilter}
-                onDueFilterChange={setDueFilter}
-                canRenameEpic={
-                  Boolean(selectedEpicId) &&
-                  selectedEpicId !== "no-epic-assigned" &&
-                  selectedEpicId !== "week" &&
-                  getViewTitle() !== "Inbox" &&
-                  activeView === "week"
-                }
-                onRenameEpic={handleRenameEpicFromList}
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-                onCompletedDateChange={(storyId, completedAt) => {
-                  const target = stories.find((s) => s.id === storyId);
-                  if (!target) return;
-                  handleUpdateStory({ ...target, completedAt });
-                }}
-              />
-            </div>
-            <div
-              className="w-1 cursor-col-resize bg-transparent hover:bg-border"
-              onMouseDown={() => setIsResizingListPane(true)}
-              title="Resize inbox list"
-            />
-            <div className="flex h-full min-w-0 flex-1 border-l border-panel-border bg-card">
-              {selectedStory ? (
-                <StoryDetail
-                  story={selectedStory}
-                  epic={epics.find((e) => e.id === selectedStory.epicId)}
+              <div className="shrink-0" style={{ width: effectiveListWidth }}>
+                <StoryList
+                  stories={filteredStories}
                   epics={epics}
                   statusOptions={statusOptions}
                   doneStatus={doneStatus}
                   defaultStatus={defaultStatus}
-                  dateMode={dateMode}
+                  savedStatusIndex={workflow.savedStatusIndex}
+                  statusFilters={statusFilters}
+                  typeOfWorkFilters={typeOfWorkFilters}
+                  onStatusFiltersChange={setStatusFilters}
+                  onTypeOfWorkFiltersChange={setTypeOfWorkFilters}
                   typeOfWorkOptions={typeOfWorkOptions}
-                  onAddTypeOfWork={handleAddTypeOfWork}
+                  statusFilterOptions={allStatusFilterOptions}
+                  typeFilterOptions={allTypeFilterOptions}
+                  selectedStoryId={selectedStoryId}
+                  onSelectStory={setSelectedStoryId}
+                  onCreateStory={(title) => handleQuickAddStory(title, activeView)}
                   onUpdateStory={handleUpdateStory}
-                  onOpenMeetings={() => setActiveView("oneonone")}
                   onDeleteStory={handleDeleteStory}
+                  onRestoreStory={handleRestoreStory}
+                  onPermanentDelete={handlePermanentDelete}
+                  onEmptyTrash={handleEmptyTrash}
+                  viewTitle={getViewTitle()}
+                  activeView={activeView}
+                  dateMode={dateMode}
+                  dueFilter={dueFilter}
+                  onDueFilterChange={setDueFilter}
+                  canRenameEpic={
+                    Boolean(selectedEpicId) &&
+                    selectedEpicId !== "no-epic-assigned" &&
+                    selectedEpicId !== "week" &&
+                    getViewTitle() !== "Inbox" &&
+                    activeView === "week"
+                  }
+                  onRenameEpic={handleRenameEpicFromList}
+                  searchQuery={searchQuery}
+                  onSearchChange={setSearchQuery}
+                  onCompletedDateChange={(storyId, completedAt) => {
+                    const target = stories.find((s) => s.id === storyId);
+                    if (!target) return;
+                    handleUpdateStory({ ...target, completedAt });
+                  }}
                 />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <EmptyState
-                    title="No story selected"
-                    description="Select a story to view details"
+              </div>
+              <div
+                className="w-1 cursor-col-resize bg-transparent hover:bg-border"
+                onMouseDown={() => setIsResizingListPane(true)}
+                title="Resize inbox list"
+              />
+              <div className="flex h-full min-w-0 flex-1 border-l border-panel-border bg-card">
+                {selectedStory ? (
+                  <StoryDetail
+                    story={selectedStory}
+                    epic={epics.find((e) => e.id === selectedStory.epicId)}
+                    epics={epics}
+                    statusOptions={statusOptions}
+                    doneStatus={doneStatus}
+                    defaultStatus={defaultStatus}
+                    dateMode={dateMode}
+                    typeOfWorkOptions={typeOfWorkOptions}
+                    onAddTypeOfWork={handleAddTypeOfWork}
+                    onUpdateStory={handleUpdateStory}
+                    onOpenMeetings={() => setActiveView("oneonone")}
+                    onDeleteStory={handleDeleteStory}
                   />
-                </div>
-              )}
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <EmptyState
+                      title="No story selected"
+                      description="Select a story to view details"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
         </>
       ) : activeView === "notifications" ? (
         <NotificationCenter
