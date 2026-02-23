@@ -59,17 +59,16 @@ export function useWorkflowConfig(): UseWorkflowConfigResult {
 
   const setWorkflowConfig = useCallback(
     async (next: WorkflowConfig | ((prev: WorkflowConfig) => WorkflowConfig)) => {
+      let resolved: WorkflowConfig | null = null;
       setWorkflow((prev) => {
-        const resolved = typeof next === "function" ? (next as any)(prev) : next;
+        resolved = typeof next === "function" ? (next as any)(prev) : next;
         applyAccent(resolved.accent);
-        // fire-and-forget persistence
-        (async () => {
-          const ctx = await loadDb();
-          saveWorkflowConfig(ctx.db, resolved);
-          await persistDb(ctx);
-        })();
         return resolved;
       });
+      if (!resolved) return;
+      const ctx = await loadDb();
+      saveWorkflowConfig(ctx.db, resolved);
+      await persistDb(ctx);
     },
     [applyAccent]
   );

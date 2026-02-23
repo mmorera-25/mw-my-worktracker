@@ -17,7 +17,13 @@ import { Button } from "@inbox/components/ui/button";
 import { Input } from "@inbox/components/ui/input";
 import { Checkbox } from "@inbox/components/ui/checkbox";
 import RichTextEditor from "../../components/ui/RichTextEditor";
-import Dialog from "../../components/ui/Dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@inbox/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -868,16 +874,22 @@ export function StoryDetail({
 
         <Dialog
           open={isCommentModalOpen}
-          onClose={closeCommentModal}
-          title={editingCommentId ? "Edit comment" : "Add comment"}
+          onOpenChange={(open) => {
+            if (!open) closeCommentModal();
+          }}
         >
-          <div className="space-y-4">
-            <RichTextEditor
-              value={editingCommentText}
-              onChange={(value) => setEditingCommentText(value)}
-              placeholder="Write your comment"
-            />
-            <div className="flex justify-end gap-2">
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{editingCommentId ? "Edit comment" : "Add comment"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <RichTextEditor
+                value={editingCommentText}
+                onChange={(value) => setEditingCommentText(value)}
+                placeholder="Write your comment"
+              />
+            </div>
+            <DialogFooter>
               <Button size="sm" variant="ghost" onClick={closeCommentModal}>
                 Cancel
               </Button>
@@ -888,8 +900,8 @@ export function StoryDetail({
               >
                 Save
               </Button>
-            </div>
-          </div>
+            </DialogFooter>
+          </DialogContent>
         </Dialog>
 
         <div className="space-y-3">
@@ -954,27 +966,33 @@ export function StoryDetail({
       </div>
       <Dialog
         open={isLinkModalOpen}
-        onClose={() => setIsLinkModalOpen(false)}
-        title="Add link"
+        onOpenChange={(open) => {
+          if (!open) setIsLinkModalOpen(false);
+        }}
       >
-        <div className="space-y-3">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs uppercase text-muted-foreground">Link title</span>
-            <Input
-              value={linkTitle}
-              onChange={(e) => setLinkTitle(e.target.value)}
-              placeholder="Optional title"
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs uppercase text-muted-foreground">Link URL</span>
-            <Input
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-              placeholder="https://example.com"
-            />
-          </label>
-          <div className="flex justify-end gap-2">
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add link</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs uppercase text-muted-foreground">Link title</span>
+              <Input
+                value={linkTitle}
+                onChange={(e) => setLinkTitle(e.target.value)}
+                placeholder="Optional title"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs uppercase text-muted-foreground">Link URL</span>
+              <Input
+                value={linkUrl}
+                onChange={(e) => setLinkUrl(e.target.value)}
+                placeholder="https://example.com"
+              />
+            </label>
+          </div>
+          <DialogFooter>
             <Button variant="ghost" onClick={() => setIsLinkModalOpen(false)}>
               Cancel
             </Button>
@@ -987,24 +1005,30 @@ export function StoryDetail({
             >
               Save
             </Button>
-          </div>
-        </div>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
       <Dialog
         open={isTypeModalOpen}
-        onClose={() => setIsTypeModalOpen(false)}
-        title="Add type of work"
+        onOpenChange={(open) => {
+          if (!open) setIsTypeModalOpen(false);
+        }}
       >
-        <div className="space-y-3">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-xs uppercase text-muted-foreground">Type of work</span>
-            <Input
-              value={customTypeValue}
-              onChange={(e) => setCustomTypeValue(e.target.value)}
-              placeholder="Enter a custom type"
-            />
-          </label>
-          <div className="flex justify-end gap-2">
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add type of work</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-xs uppercase text-muted-foreground">Type of work</span>
+              <Input
+                value={customTypeValue}
+                onChange={(e) => setCustomTypeValue(e.target.value)}
+                placeholder="Enter a custom type"
+              />
+            </label>
+          </div>
+          <DialogFooter>
             <Button variant="ghost" onClick={() => setIsTypeModalOpen(false)}>
               Cancel
             </Button>
@@ -1021,8 +1045,8 @@ export function StoryDetail({
             >
               Save
             </Button>
-          </div>
-        </div>
+          </DialogFooter>
+        </DialogContent>
       </Dialog>
     </div>
   );

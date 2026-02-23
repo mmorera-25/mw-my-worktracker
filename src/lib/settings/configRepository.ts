@@ -1,9 +1,10 @@
 import type { Database } from 'sql.js'
 
-export type KanbanBucket = 'not-started' | 'working' | 'completed'
+export type KanbanBucket = 'not-started' | 'on-hold' | 'working' | 'completed'
 
 export const KANBAN_BUCKETS: { id: KanbanBucket; label: string }[] = [
-  { id: 'not-started', label: 'Not started' },
+  { id: 'not-started', label: 'Backlog/New' },
+  { id: 'on-hold', label: 'On Hold' },
   { id: 'working', label: 'Working on it' },
   { id: 'completed', label: 'Completed' },
 ]
@@ -35,7 +36,7 @@ export const inferKanbanBucket = (status: string): KanbanBucket => {
     return 'working'
   }
   if (['hold', 'blocked', 'wait', 'on hold'].some((keyword) => lower.includes(keyword))) {
-    return 'working'
+    return 'on-hold'
   }
   if (['ask', 'schedule', 'new', 'backlog'].some((keyword) => lower.includes(keyword))) {
     return 'not-started'

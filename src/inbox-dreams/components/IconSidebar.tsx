@@ -35,7 +35,7 @@ interface IconSidebarProps {
 
 const topIcons = [
   { id: "week", icon: Inbox, label: "Inbox", iconTint: "text-primary" },
-  { id: "yearly", icon: ListTodo, label: "Yearly Inbox", iconTint: "text-accent" },
+  { id: "yearly", icon: ListTodo, label: "Quarterly Planning Inbox", iconTint: "text-accent" },
   { id: "kanban", icon: Kanban, label: "Kanban" },
   { id: "search", icon: Search, label: "Search" },
 ];

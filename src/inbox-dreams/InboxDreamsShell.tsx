@@ -101,7 +101,6 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     handleUpdateEpicField,
     handleCreateStory,
     handleUpdateStory,
-    handleMoveStoryToBucket,
     handleDeleteStory,
     handleRestoreStory,
     handlePermanentDelete,
@@ -126,8 +125,8 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   } = useInboxFilters({
     stories,
     statusOptions,
-    doneStatus,
     typeOfWorkOptions,
+    activeView,
   });
   const [editingField, setEditingField] = useState<{
     id: string;
@@ -240,6 +239,11 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
   const filteredStories = useMemo(
     () => getFilteredStories(activeView, selectedEpicId),
     [getFilteredStories, activeView, selectedEpicId]
+  );
+
+  const kanbanStories = useMemo(
+    () => filteredStories.filter((story) => !isDocumentationStory(story)),
+    [filteredStories, isDocumentationStory]
   );
 
   const modalFilteredStories = useMemo(
@@ -453,7 +457,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
     if (activeView === "search") return "Search";
     if (activeView === "settings") return "Settings";
     if (activeView === "epics") return "Epics";
-    if (activeView === "yearly") return "Yearly Inbox";
+    if (activeView === "yearly") return "Quarterly Planning Inbox";
     if (activeView === "kanban") return "Kanban";
     return "Inbox";
   };
@@ -682,31 +686,32 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
 
   const renderKanbanPage = () => (
     <KanbanPage
-      stories={filteredStories}
+      stories={kanbanStories}
       epics={epics}
-      statusOrder={workflow.columns}
       bucketMap={kanbanBuckets}
       selectedStoryId={selectedStoryId}
-      selectedStory={selectedStory}
       statusFilters={statusFilters}
       typeOfWorkFilters={typeOfWorkFilters}
       statusFilterOptions={allStatusFilterOptions}
       typeFilterOptions={allTypeFilterOptions}
       dueFilter={dueFilter}
-      onSelectStory={setSelectedStoryId}
-      onMoveStory={handleMoveStoryToBucket}
+      statusOrder={workflow.columns}
+      onSelectStory={(storyId) => {
+        window.sessionStorage.setItem("open-inbox-story-id", storyId);
+        window.dispatchEvent(
+          new CustomEvent("open-inbox-story", {
+            detail: { storyId },
+          })
+        );
+      }}
       onStatusFiltersChange={setStatusFilters}
       onTypeOfWorkFiltersChange={setTypeOfWorkFilters}
       onDueFilterChange={setDueFilter}
-      statusOptions={statusOptions}
-      doneStatus={doneStatus}
-      defaultStatus={defaultStatus}
-      dateMode={dateMode}
-      typeOfWorkOptions={typeOfWorkOptions}
-      onAddTypeOfWork={handleAddTypeOfWork}
-      onUpdateStory={handleUpdateStory}
-      onOpenMeetings={() => setActiveView("oneonone")}
-      onDeleteStory={handleDeleteStory}
+      onSetStoryStatus={(storyId, status) => {
+        const target = stories.find((story) => story.id === storyId);
+        if (!target) return;
+        handleUpdateStory({ ...target, status });
+      }}
     />
   );
 
@@ -840,7 +845,7 @@ const InboxDreamsShell = ({ user }: InboxDreamsShellProps) => {
           modalActiveView === "trash"
             ? "Trash"
             : modalActiveView === "yearly"
-            ? "Yearly Inbox"
+            ? "Quarterly Planning Inbox"
             : modalActiveView === "search"
             ? "Search"
             : "Inbox"

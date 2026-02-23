@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
 import Input from '../../components/ui/Input'
-import Select from '../../components/ui/Select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@inbox/components/ui/select'
 import Dialog from '../../components/ui/Dialog'
 import type { KanbanBucket, WorkflowConfig } from '../../lib/settings/configRepository'
 import { KANBAN_BUCKETS, inferKanbanBucket, normalizeKanbanBuckets } from '../../lib/settings/configRepository'
@@ -19,7 +25,7 @@ import { loadDirectoryHandle, saveDirectoryHandle } from '../../lib/storage/hand
 import { loadFromIdb, saveToIdb } from '../../lib/storage/idbFallback'
 import { openDatabase, serialize } from '../../lib/storage/sqliteWasm'
 import { bootstrapSchema } from '../../lib/storage/schema'
-import { loadDb } from '../../lib/storage/dbManager'
+import { loadDb, persistDb } from '../../lib/storage/dbManager'
 import { loadInboxState, saveInboxState } from '../../inbox-dreams/data/inboxRepository'
 import { downloadLatestEncryptedBackup, uploadEncryptedBackup } from '../../lib/storage/cloudBackup'
 import { auth } from '../../firebase'
@@ -1089,20 +1095,24 @@ const DataStoragePanel = ({
                       <span className="flex-1 truncate font-medium text-text-primary">{status}</span>
                       <Select
                         value={kanbanBuckets[status] ?? 'not-started'}
-                        onChange={(e) => {
-                          const value = e.target.value as KanbanBucket
+                        onValueChange={(nextValue) => {
+                          const value = nextValue as KanbanBucket
                           setKanbanBuckets((prev) =>
                             normalizeKanbanBuckets(columns, { ...prev, [status]: value }),
                           )
                         }}
                         disabled={isSaved}
-                        className="w-36 text-sm h-9"
                       >
-                        {KANBAN_BUCKETS.map((bucket) => (
-                          <option key={bucket.id} value={bucket.id}>
-                            {bucket.label}
-                          </option>
-                        ))}
+                        <SelectTrigger className="w-36 text-sm h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {KANBAN_BUCKETS.map((bucket) => (
+                            <SelectItem key={bucket.id} value={bucket.id}>
+                              {bucket.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
                       </Select>
                     </div>
                   )

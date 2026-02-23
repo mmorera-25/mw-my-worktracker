@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import type { Epic, Story } from "@inbox/types";
 import { loadDb, persistDb } from "../../lib/storage/dbManager";
-import { loadInboxState } from "@inbox/data/inboxRepository";
+import { loadInboxState, saveInboxState } from "@inbox/data/inboxRepository";
 import { normalizeKanbanBuckets, type KanbanBucket } from "../../lib/settings/configRepository";
 
 export const NO_EPIC_ID = "no-epic-assigned";
@@ -45,6 +45,7 @@ const ensureNoEpicAssigned = (epics: Epic[], stories: Story[]) => {
 
   let noEpic = epics.find((epic) => epic.id === NO_EPIC_ID) ?? epics.find((epic) => epic.name === NO_EPIC_NAME);
   let nextEpics = epics;
+  let nextStories = stories;
 
   if (!noEpic) {
     noEpic = {
@@ -77,13 +78,30 @@ const ensureNoEpicAssigned = (epics: Epic[], stories: Story[]) => {
       createdAt: new Date(),
     };
     nextEpics = [...nextEpics, docEpic];
-  } else if (docEpic.isArchived || docEpic.name !== DOC_EPIC_NAME) {
-    nextEpics = nextEpics.map((epic) => (epic.id === docEpic!.id ? { ...epic, name: DOC_EPIC_NAME, isArchived: false } : epic));
+  } else {
+    const legacyDocEpics = nextEpics.filter(
+      (epic) =>
+        epic.id !== DOC_EPIC_ID &&
+        (epic.name === DOC_EPIC_NAME || epic.name === DOC_EPIC_LEGACY_NAME),
+    );
+    if (legacyDocEpics.length > 0) {
+      const legacyIds = new Set(legacyDocEpics.map((epic) => epic.id));
+      nextEpics = nextEpics.filter((epic) => !legacyIds.has(epic.id));
+      const migratedStories = nextStories.map((story) =>
+        legacyIds.has(story.epicId) ? { ...story, epicId: DOC_EPIC_ID } : story,
+      );
+      nextStories = migratedStories;
+    }
+    if (docEpic.isArchived || docEpic.name !== DOC_EPIC_NAME) {
+      nextEpics = nextEpics.map((epic) =>
+        epic.id === docEpic!.id ? { ...epic, name: DOC_EPIC_NAME, isArchived: false } : epic,
+      );
+    }
   }
 
   const fallbackEpicId = noEpic.id;
   let didUpdateStory = false;
-  const nextStories = stories.map((story) => {
+  nextStories = nextStories.map((story) => {
     if (isMissingEpic(story)) {
       didUpdateStory = true;
       return { ...story, epicId: fallbackEpicId };
@@ -93,7 +111,7 @@ const ensureNoEpicAssigned = (epics: Epic[], stories: Story[]) => {
 
   return {
     epics: nextEpics,
-    stories: didUpdateStory ? nextStories : stories,
+    stories: nextStories,
   };
 };
 
@@ -162,6 +180,11 @@ export function useInboxData({ doneStatus, defaultStatus, kanbanBuckets }: UseIn
       );
       setEpics(normalized.epics);
       setStories(statusNormalized);
+      saveInboxState(ctx.db, {
+        epics: normalized.epics,
+        stories: statusNormalized,
+        preferences: inboxState.preferences,
+      });
       await persistDb(ctx);
       isHydratedRef.current = true;
     };
@@ -179,6 +202,11 @@ export function useInboxData({ doneStatus, defaultStatus, kanbanBuckets }: UseIn
     );
     setEpics(normalized.epics);
     setStories(statusNormalized);
+    saveInboxState(ctx.db, {
+      epics: normalized.epics,
+      stories: statusNormalized,
+      preferences: inboxState.preferences,
+    });
     await persistDb(ctx);
   }, []);
 

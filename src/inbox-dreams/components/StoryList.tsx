@@ -220,7 +220,7 @@ export function StoryList({
   const isCompletedView = activeView === 'completed';
   const isTrashView = activeView === 'trash';
   const isSearchView = activeView === "search";
-  const showStatusFilters = activeView === "week" || activeView === "yearly";
+  const showStatusFilters = activeView === "week";
   const showDueFilter = activeView === "week";
   const hasActiveFilters =
     (showStatusFilters &&
